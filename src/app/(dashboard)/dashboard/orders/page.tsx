@@ -8,6 +8,8 @@ import { OrderCard } from '@/components/orders/OrderCard'
 import { Tabs } from '@/components/ui/Tabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoading } from '@/components/dashboard/PageLoading'
+import { Badge } from '@/components/ui/Badge'
+import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { OrderStatus, OrderWithItems } from '@/types'
 
 const tabs = [
@@ -33,10 +35,116 @@ function sortNewestFirst(orders: OrderWithItems[]) {
   )
 }
 
+type TableOrderGroup = {
+  tableId: string
+  tableNumber: string
+  orders: OrderWithItems[]
+  status: OrderStatus
+  total: number
+  latestCreatedAt: string
+}
+
+const tableStatusPriority: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready', 'completed', 'cancelled']
+
+function getTableStatus(orders: OrderWithItems[]): OrderStatus {
+  return tableStatusPriority.find((status) => orders.some((order) => order.status === status)) || 'completed'
+}
+
+function groupOrdersByTable(orders: OrderWithItems[]): TableOrderGroup[] {
+  const groups = new Map<string, TableOrderGroup>()
+
+  for (const order of orders) {
+    const tableId = order.table_id || 'unknown'
+    const existing = groups.get(tableId)
+
+    if (existing) {
+      existing.orders.push(order)
+      existing.total += Number(order.total_amount || 0)
+      if (new Date(order.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+        existing.latestCreatedAt = order.created_at
+      }
+      existing.status = getTableStatus(existing.orders)
+      continue
+    }
+
+    groups.set(tableId, {
+      tableId,
+      tableNumber: order.table?.table_number || 'Unknown',
+      orders: [order],
+      status: order.status,
+      total: Number(order.total_amount || 0),
+      latestCreatedAt: order.created_at,
+    })
+  }
+
+  return Array.from(groups.values()).sort(
+    (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
+  )
+}
+
+interface TableOrderCardProps {
+  group: TableOrderGroup
+  expanded: boolean
+  onToggle: () => void
+  onAccept: (orderId: string) => void
+  onReject: (orderId: string) => void
+  onUpdateStatus: (orderId: string, status: string) => void
+}
+
+function TableOrderCard({
+  group,
+  expanded,
+  onToggle,
+  onAccept,
+  onReject,
+  onUpdateStatus,
+}: TableOrderCardProps) {
+  const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-3 text-left"
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-gray-900">Table {group.tableNumber}</span>
+            <Badge status={group.status}>{group.status}</Badge>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'} · {activeCount} active · {formatTimeAgo(group.latestCreatedAt)}
+          </p>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.total)}</p>
+          <p className="mt-1 text-xs text-gray-500">{expanded ? 'Hide' : 'View'} orders</p>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+          {group.orders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onAccept={() => onAccept(order.id)}
+              onReject={() => onReject(order.id)}
+              onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OrdersContent() {
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('active')
+  const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({})
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -155,6 +263,8 @@ function OrdersContent() {
     return <PageLoading />
   }
 
+  const tableGroups = groupOrdersByTable(orders)
+
   return (
     <div className="space-y-4">
       <div>
@@ -164,15 +274,20 @@ function OrdersContent() {
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      {orders.length > 0 ? (
+      {tableGroups.length > 0 ? (
         <div className="space-y-3">
-          {orders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onAccept={() => handleAccept(order.id)}
-              onReject={() => handleReject(order.id)}
-              onUpdateStatus={(status) => handleUpdateStatus(order.id, status)}
+          {tableGroups.map((group) => (
+            <TableOrderCard
+              key={group.tableId}
+              group={group}
+              expanded={expandedTables[group.tableId] ?? true}
+              onToggle={() => setExpandedTables((current) => ({
+                ...current,
+                [group.tableId]: !(current[group.tableId] ?? true),
+              }))}
+              onAccept={handleAccept}
+              onReject={handleReject}
+              onUpdateStatus={handleUpdateStatus}
             />
           ))}
         </div>

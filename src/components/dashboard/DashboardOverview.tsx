@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatCard } from '@/components/dashboard/StatCard'
-import { OrderCard } from '@/components/orders/OrderCard'
+import { Badge } from '@/components/ui/Badge'
 import { useRealtimeOrders } from '@/hooks/useRealtime'
-import { formatCurrency } from '@/utils/format'
+import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
-import { OrderWithItems } from '@/types'
+import { OrderStatus, OrderWithItems } from '@/types'
 
 interface DashboardOverviewProps {
   restaurantId: string
@@ -28,10 +28,57 @@ const emptyStats: DashboardStats = {
   pendingOrders: 0,
 }
 
+type TableSummary = {
+  tableId: string
+  tableNumber: string
+  orders: OrderWithItems[]
+  status: OrderStatus
+  total: number
+  latestCreatedAt: string
+}
+
+const tableStatusPriority: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready', 'completed', 'cancelled']
+
+function getTableStatus(orders: OrderWithItems[]): OrderStatus {
+  return tableStatusPriority.find((status) => orders.some((order) => order.status === status)) || 'completed'
+}
+
 function startOfTodayIso() {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
   return date.toISOString()
+}
+
+function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
+  const groups = new Map<string, TableSummary>()
+
+  for (const order of orders) {
+    const tableId = order.table_id || 'unknown'
+    const existing = groups.get(tableId)
+
+    if (existing) {
+      existing.orders.push(order)
+      existing.total += Number(order.total_amount || 0)
+      if (new Date(order.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+        existing.latestCreatedAt = order.created_at
+      }
+      existing.status = getTableStatus(existing.orders)
+      continue
+    }
+
+    groups.set(tableId, {
+      tableId,
+      tableNumber: order.table?.table_number || 'Unknown',
+      orders: [order],
+      status: order.status,
+      total: Number(order.total_amount || 0),
+      latestCreatedAt: order.created_at,
+    })
+  }
+
+  return Array.from(groups.values()).sort(
+    (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
+  )
 }
 
 export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
@@ -135,8 +182,8 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
     }
   }, [fetchOverview]))
 
-  const billableRecentOrders = useMemo(
-    () => recentOrders.filter((order) => !isServiceRequestOrder(order)).slice(0, 5),
+  const recentTableSummaries = useMemo(
+    () => groupOrdersByTable(recentOrders.filter((order) => !isServiceRequestOrder(order))).slice(0, 5),
     [recentOrders]
   )
 
@@ -156,10 +203,28 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
 
       <div>
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Recent Orders</h2>
-        {billableRecentOrders.length > 0 ? (
+        {recentTableSummaries.length > 0 ? (
           <div className="space-y-3">
-            {billableRecentOrders.map((order) => (
-              <OrderCard key={order.id} order={order} compact />
+            {recentTableSummaries.map((table) => (
+              <div key={table.tableId} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-700">
+                        Table {table.tableNumber}
+                      </span>
+                      <Badge status={table.status}>{table.status}</Badge>
+                      <span className="text-xs text-gray-500">{formatTimeAgo(table.latestCreatedAt)}</span>
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-gray-900">
+                      {table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'} for this table
+                    </p>
+                  </div>
+                  <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+                    {formatCurrency(table.total)}
+                  </p>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
