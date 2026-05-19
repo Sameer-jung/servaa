@@ -36,9 +36,64 @@ function BillingContent() {
     setLoading(false)
   }, [restaurant, supabase])
 
+  const reconcileMissingInvoices = useCallback(async () => {
+    if (!restaurant) return
+
+    const [{ data: completedOrders }, { data: existingInvoices }] = await Promise.all([
+      supabase
+        .from('orders')
+        .select('id, items:order_items(id)')
+        .eq('restaurant_id', restaurant.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('invoices')
+        .select('order_id')
+        .eq('restaurant_id', restaurant.id),
+    ])
+
+    const invoicedOrderIds = new Set((existingInvoices || []).map((invoice) => invoice.order_id))
+    const missingInvoiceOrders = (completedOrders || []).filter((order) => {
+      const items = Array.isArray(order.items) ? order.items : []
+      return items.length > 0 && !invoicedOrderIds.has(order.id)
+    })
+
+    if (missingInvoiceOrders.length === 0) return
+
+    await Promise.all(
+      missingInvoiceOrders.map((order) =>
+        fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: order.id, restaurantId: restaurant.id }),
+        })
+      )
+    )
+  }, [restaurant, supabase])
+
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (!restaurant) {
+      fetchData()
+      return
+    }
+
+    let cancelled = false
+
+    async function loadBilling() {
+      setLoading(true)
+      await reconcileMissingInvoices()
+      if (!cancelled) {
+        await fetchData()
+      }
+    }
+
+    loadBilling()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchData, reconcileMissingInvoices, restaurant])
 
   useEffect(() => {
     if (!restaurant) return

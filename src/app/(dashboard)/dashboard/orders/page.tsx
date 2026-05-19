@@ -133,7 +133,22 @@ function OrdersContent() {
     const nextStatus = status as OrderStatus
     applyOptimisticStatus(orderId, nextStatus)
     const { error } = await supabase.from('orders').update({ status: nextStatus }).eq('id', orderId)
-    if (error) fetchOrders()
+    if (error) {
+      fetchOrders()
+      return
+    }
+
+    if (nextStatus === 'completed' && restaurant) {
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, restaurantId: restaurant.id }),
+      })
+
+      if (!response.ok) {
+        fetchOrders()
+      }
+    }
   }
 
   if (restaurantLoading || loading) {

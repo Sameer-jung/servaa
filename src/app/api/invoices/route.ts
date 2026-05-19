@@ -29,6 +29,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order First' }, { status: 400 })
     }
 
+    const { data: existingInvoice, error: existingInvoiceError } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('order_id', orderId)
+      .maybeSingle()
+
+    if (existingInvoiceError) {
+      return NextResponse.json({ error: existingInvoiceError.message }, { status: 500 })
+    }
+
+    if (existingInvoice) {
+      return NextResponse.json({ invoice: existingInvoice })
+    }
+
     // Get restaurant tax rate
     const { data: restaurant } = await supabase
       .from('restaurants')
