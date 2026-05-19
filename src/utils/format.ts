@@ -38,10 +38,10 @@
 
 
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number, currency = 'NPR'): string {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'NPR',
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount)
