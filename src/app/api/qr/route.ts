@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Table not found or access denied' }, { status: 404 })
     }
 
-    const url = getTableQRUrl(restaurantSlug, tableNumber)
+    const url = getTableQRUrl(restaurantSlug, tableNumber, request)
     const qrCodeDataUrl = await generateQRCodeDataUrl(url)
 
     // Store the generated PNG data URL directly. This avoids requiring a
