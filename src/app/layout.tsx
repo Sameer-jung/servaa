@@ -3,7 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'QR Order - Restaurant Management System',
+  title: 'Servaa - Restaurant Management System',
   description: 'In-restaurant QR ordering and management system for cafes and restaurants',
 }
 
