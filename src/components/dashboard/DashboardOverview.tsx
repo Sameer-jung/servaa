@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useRealtimeOrders } from '@/hooks/useRealtime'
 import { formatCurrency, formatDate, formatTimeAgo } from '@/utils/format'
@@ -29,6 +30,8 @@ const emptyStats: DashboardStats = {
   pendingOrders: 0,
 }
 
+const pageSize = 20
+
 type TableSummary = {
   tableId: string
   tableNumber: string
@@ -42,12 +45,6 @@ const tableStatusPriority: OrderStatus[] = ['pending', 'accepted', 'preparing', 
 
 function getTableStatus(orders: OrderWithItems[]): OrderStatus {
   return tableStatusPriority.find((status) => orders.some((order) => order.status === status)) || 'completed'
-}
-
-function startOfTodayIso() {
-  const date = new Date()
-  date.setHours(0, 0, 0, 0)
-  return date.toISOString()
 }
 
 function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
@@ -85,8 +82,12 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
 export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
   const [stats, setStats] = useState<DashboardStats>(emptyStats)
   const [recentOrders, setRecentOrders] = useState<OrderWithItems[]>([])
+  const [recentPage, setRecentPage] = useState(0)
+  const [hasNextRecentPage, setHasNextRecentPage] = useState(false)
   const [selectedTable, setSelectedTable] = useState<TableSummary | null>(null)
   const [tableHistory, setTableHistory] = useState<OrderWithItems[]>([])
+  const [tableHistoryPage, setTableHistoryPage] = useState(0)
+  const [hasNextTableHistoryPage, setHasNextTableHistoryPage] = useState(false)
   const [loadingTableHistory, setLoadingTableHistory] = useState(false)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -94,59 +95,37 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
   const fetchOverview = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
 
-    const today = startOfTodayIso()
+    const from = recentPage * pageSize
+    const to = from + pageSize - 1
 
     const [
-      activeOrdersResult,
-      activeTablesResult,
-      todayOrdersResult,
-      pendingOrdersResult,
+      statsResult,
       recentOrdersResult,
     ] = await Promise.all([
       supabase
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', restaurantId)
-        .in('status', ['pending', 'accepted', 'preparing', 'ready']),
-      supabase
-        .from('tables')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', restaurantId)
-        .eq('is_active', true),
-      supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('restaurant_id', restaurantId)
-        .gte('created_at', today)
-        .eq('status', 'completed'),
-      supabase
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', restaurantId)
-        .eq('status', 'pending'),
+        .rpc('get_dashboard_stats', { p_restaurant_id: restaurantId }),
       supabase
         .from('orders')
         .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
         .eq('restaurant_id', restaurantId)
         .order('created_at', { ascending: false })
-        .limit(20),
+        .range(from, to),
     ])
 
-    const todaySales = (todayOrdersResult.data || []).reduce(
-      (sum, order) => sum + Number(order.total_amount || 0),
-      0
-    )
+    const dashboardStats = Array.isArray(statsResult.data) ? statsResult.data[0] : null
 
     setStats({
-      activeOrders: activeOrdersResult.count || 0,
-      activeTables: activeTablesResult.count || 0,
-      todaySales,
-      pendingOrders: pendingOrdersResult.count || 0,
+      activeOrders: Number(dashboardStats?.active_orders || 0),
+      activeTables: Number(dashboardStats?.active_tables || 0),
+      todaySales: Number(dashboardStats?.today_sales || 0),
+      pendingOrders: Number(dashboardStats?.pending_orders || 0),
     })
 
-    setRecentOrders((recentOrdersResult.data as OrderWithItems[] | null) || [])
+    const nextRecentOrders = (recentOrdersResult.data as OrderWithItems[] | null) || []
+    setRecentOrders(nextRecentOrders)
+    setHasNextRecentPage(nextRecentOrders.length === pageSize)
     setLoading(false)
-  }, [restaurantId, supabase])
+  }, [recentPage, restaurantId, supabase])
 
   useEffect(() => {
     fetchOverview()
@@ -191,9 +170,10 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
     [recentOrders]
   )
 
-  const openTableHistory = async (table: TableSummary) => {
-    setSelectedTable(table)
-    setTableHistory(table.orders)
+  const fetchTableHistory = useCallback(async (table: TableSummary, page: number) => {
+    const from = page * pageSize
+    const to = from + pageSize - 1
+
     setLoadingTableHistory(true)
 
     const { data } = await supabase
@@ -202,15 +182,36 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
       .eq('restaurant_id', restaurantId)
       .eq('table_id', table.tableId)
       .order('created_at', { ascending: false })
+      .range(from, to)
 
-    setTableHistory(((data as OrderWithItems[] | null) || []).filter((order) => !isServiceRequestOrder(order)))
+    const nextHistory = ((data as OrderWithItems[] | null) || []).filter((order) => !isServiceRequestOrder(order))
+
+    setTableHistory(nextHistory)
+    setHasNextTableHistoryPage(nextHistory.length === pageSize)
     setLoadingTableHistory(false)
+  }, [restaurantId, supabase])
+
+  const openTableHistory = async (table: TableSummary) => {
+    setSelectedTable(table)
+    setTableHistory(table.orders)
+    setTableHistoryPage(0)
+    setLoadingTableHistory(true)
+    await fetchTableHistory(table, 0)
   }
 
   const closeTableHistory = () => {
     setSelectedTable(null)
     setTableHistory([])
+    setTableHistoryPage(0)
+    setHasNextTableHistoryPage(false)
     setLoadingTableHistory(false)
+  }
+
+  const changeTableHistoryPage = async (nextPage: number) => {
+    if (!selectedTable) return
+
+    setTableHistoryPage(nextPage)
+    await fetchTableHistory(selectedTable, nextPage)
   }
 
   return (
@@ -258,6 +259,27 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                 </div>
               </button>
             ))}
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={recentPage === 0}
+                onClick={() => setRecentPage((page) => Math.max(0, page - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-gray-500">Page {recentPage + 1}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasNextRecentPage}
+                onClick={() => setRecentPage((page) => page + 1)}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         ) : (
           <EmptyState title="No orders yet" description="Orders will appear here when customers start ordering." icon={<svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
@@ -280,8 +302,9 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
           )}
 
           {!loadingTableHistory && tableHistory.length > 0 && (
-            <div className="space-y-3">
-              {tableHistory.map((order) => (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                {tableHistory.map((order) => (
                 <div key={order.id} className="rounded-lg border border-gray-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -327,7 +350,29 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                     </p>
                   )}
                 </div>
-              ))}
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={tableHistoryPage === 0}
+                  onClick={() => changeTableHistoryPage(Math.max(0, tableHistoryPage - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-500">Page {tableHistoryPage + 1}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasNextTableHistoryPage}
+                  onClick={() => changeTableHistoryPage(tableHistoryPage + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </div>

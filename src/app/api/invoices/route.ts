@@ -143,6 +143,11 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const restaurantId = searchParams.get('restaurantId')
+    const paymentStatus = searchParams.get('paymentStatus')
+    const page = Math.max(0, Number(searchParams.get('page') || 0))
+    const pageSize = Math.min(50, Math.max(1, Number(searchParams.get('pageSize') || 20)))
+    const from = page * pageSize
+    const to = from + pageSize - 1
 
     if (!restaurantId) {
       return NextResponse.json({ error: 'Missing restaurantId' }, { status: 400 })
@@ -160,11 +165,17 @@ export async function GET(request: Request) {
 
     await reconcileCompletedOrders(restaurantId)
 
-    const { data: invoices, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('invoices')
       .select('*, order:orders(*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name)))')
       .eq('restaurant_id', restaurantId)
       .order('created_at', { ascending: false })
+
+    if (paymentStatus) {
+      query = query.eq('payment_status', paymentStatus)
+    }
+
+    const { data: invoices, error } = await query.range(from, to)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

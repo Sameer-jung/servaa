@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { Invoice } from '@/types'
 
+const pageSize = 20
+
 type TableInvoiceGroup = {
   tableId: string
   tableNumber: string
@@ -108,7 +110,12 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable }: Billing
 }
 
 function BillingContent() {
-  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([])
+  const [paidInvoices, setPaidInvoices] = useState<Invoice[]>([])
+  const [unpaidPage, setUnpaidPage] = useState(0)
+  const [paidPage, setPaidPage] = useState(0)
+  const [hasNextUnpaidPage, setHasNextUnpaidPage] = useState(false)
+  const [hasNextPaidPage, setHasNextPaidPage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showDetail, setShowDetail] = useState(false)
@@ -118,25 +125,38 @@ function BillingContent() {
 
   const fetchData = useCallback(async () => {
     if (!restaurant) {
-      setInvoices([])
+      setUnpaidInvoices([])
+      setPaidInvoices([])
       setLoading(false)
       return
     }
 
     setLoading(true)
-    const response = await fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}`)
-    const result = await response.json().catch(() => null)
+    const [unpaidResponse, paidResponse] = await Promise.all([
+      fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=unpaid&page=${unpaidPage}&pageSize=${pageSize}`),
+      fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=paid&page=${paidPage}&pageSize=${pageSize}`),
+    ])
 
-    if (!response.ok) {
-      setMessage(result?.error || 'Failed to load invoices')
-      setInvoices([])
+    const unpaidResult = await unpaidResponse.json().catch(() => null)
+    const paidResult = await paidResponse.json().catch(() => null)
+
+    if (!unpaidResponse.ok || !paidResponse.ok) {
+      setMessage(unpaidResult?.error || paidResult?.error || 'Failed to load invoices')
+      setUnpaidInvoices([])
+      setPaidInvoices([])
       setLoading(false)
       return
     }
 
-    setInvoices((result?.invoices as Invoice[] | undefined) || [])
+    const nextUnpaidInvoices = (unpaidResult?.invoices as Invoice[] | undefined) || []
+    const nextPaidInvoices = (paidResult?.invoices as Invoice[] | undefined) || []
+
+    setUnpaidInvoices(nextUnpaidInvoices)
+    setPaidInvoices(nextPaidInvoices)
+    setHasNextUnpaidPage(nextUnpaidInvoices.length === pageSize)
+    setHasNextPaidPage(nextPaidInvoices.length === pageSize)
     setLoading(false)
-  }, [restaurant, supabase])
+  }, [paidPage, restaurant, supabase, unpaidPage])
 
   useEffect(() => {
     fetchData()
@@ -192,8 +212,6 @@ function BillingContent() {
     fetchData()
   }
 
-  const unpaidInvoices = invoices.filter((i) => i.payment_status === 'unpaid')
-  const paidInvoices = invoices.filter((i) => i.payment_status === 'paid')
   const unpaidInvoiceGroups = groupInvoicesByTable(unpaidInvoices)
   const paidInvoiceGroups = groupInvoicesByTable(paidInvoices)
 
@@ -227,6 +245,27 @@ function BillingContent() {
                 onSendToTable={handleSendToTable}
               />
             ))}
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={unpaidPage === 0}
+                onClick={() => setUnpaidPage((page) => Math.max(0, page - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-gray-500">Page {unpaidPage + 1}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasNextUnpaidPage}
+                onClick={() => setUnpaidPage((page) => page + 1)}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         ) : (
           <EmptyState title="No unpaid invoices" description="All caught up!" />
@@ -245,6 +284,27 @@ function BillingContent() {
                 onSendToTable={handleSendToTable}
               />
             ))}
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={paidPage === 0}
+                onClick={() => setPaidPage((page) => Math.max(0, page - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-gray-500">Page {paidPage + 1}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasNextPaidPage}
+                onClick={() => setPaidPage((page) => page + 1)}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         ) : (
           <EmptyState title="No paid invoices" description="Paid invoices will appear here." />

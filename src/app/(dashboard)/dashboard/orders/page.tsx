@@ -9,6 +9,7 @@ import { Tabs } from '@/components/ui/Tabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoading } from '@/components/dashboard/PageLoading'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { OrderStatus, OrderWithItems } from '@/types'
 
@@ -21,6 +22,7 @@ const tabs = [
 
 const activeStatuses: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready']
 const completedStatuses: OrderStatus[] = ['completed', 'cancelled']
+const pageSize = 20
 
 function orderMatchesTab(order: OrderWithItems, activeTab: string) {
   if (activeTab === 'active') return activeStatuses.includes(order.status)
@@ -144,6 +146,8 @@ function OrdersContent() {
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('active')
+  const [page, setPage] = useState(0)
+  const [hasNextPage, setHasNextPage] = useState(false)
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({})
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
@@ -156,6 +160,9 @@ function OrdersContent() {
     }
 
     setLoading(true)
+    const from = page * pageSize
+    const to = from + pageSize - 1
+
     let query = supabase
       .from('orders')
       .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
@@ -170,10 +177,12 @@ function OrdersContent() {
       query = query.in('status', ['completed', 'cancelled'])
     }
 
-    const { data } = await query
-    setOrders((data as OrderWithItems[]) || [])
+    const { data } = await query.range(from, to)
+    const nextOrders = (data as OrderWithItems[]) || []
+    setOrders(nextOrders)
+    setHasNextPage(nextOrders.length === pageSize)
     setLoading(false)
-  }, [restaurant, activeTab, supabase])
+  }, [restaurant, activeTab, page, supabase])
 
   const fetchOrderById = useCallback(async (orderId: string) => {
     if (!restaurant) return null
@@ -191,6 +200,11 @@ function OrdersContent() {
   useEffect(() => {
     fetchOrders()
   }, [fetchOrders])
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId)
+    setPage(0)
+  }
 
   // Realtime updates
   useRealtimeOrders(restaurant?.id || '', useCallback((update) => {
@@ -272,7 +286,7 @@ function OrdersContent() {
         <p className="text-sm text-gray-500">Manage incoming orders in real-time</p>
       </div>
 
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
 
       {tableGroups.length > 0 ? (
         <div className="space-y-3">
@@ -290,6 +304,27 @@ function OrdersContent() {
               onUpdateStatus={handleUpdateStatus}
             />
           ))}
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((currentPage) => Math.max(0, currentPage - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-gray-500">Page {page + 1}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!hasNextPage}
+              onClick={() => setPage((currentPage) => currentPage + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       ) : (
         <EmptyState
