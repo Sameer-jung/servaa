@@ -22,7 +22,7 @@ export function MobileNav() {
     <>
       <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:hidden">
         <Link href="/dashboard" className="text-lg font-bold text-brand-600" onClick={() => setIsOpen(false)}>
-          QR Order
+          Servaa
         </Link>
         <button
           onClick={() => setIsOpen(!isOpen)}

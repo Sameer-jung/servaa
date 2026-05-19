@@ -21,7 +21,7 @@ export function DashboardSidebar() {
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-gray-200 bg-white lg:flex">
       <div className="flex h-16 items-center border-b border-gray-200 px-6">
         <Link href="/dashboard" className="text-xl font-bold text-brand-600">
-          QR Order
+          Servaa
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-4">
