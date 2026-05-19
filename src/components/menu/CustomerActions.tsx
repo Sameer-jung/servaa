@@ -34,7 +34,7 @@ export function CustomerActions({ restaurantId, tableId }: CustomerActionsProps)
   }
 
   return (
-    <div className="fixed bottom-20 left-0 right-0 z-30 px-3 sm:px-4">
+    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white px-3 py-3 shadow-lg sm:px-4">
       <div className="mx-auto grid max-w-lg grid-cols-2 gap-2 sm:gap-3">
         <Button
           variant="outline"

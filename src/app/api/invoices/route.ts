@@ -26,6 +26,26 @@ async function verifyRestaurantAccess(userId: string, restaurantId: string) {
   return Boolean(staffMember)
 }
 
+async function generateInvoiceNumber(restaurantId: string) {
+  const now = new Date()
+  const prefix = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('')
+
+  const startOfDay = new Date(now)
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const { count } = await supabaseAdmin
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', startOfDay.toISOString())
+
+  return `${prefix}-${String((count || 0) + 1).padStart(4, '0')}`
+}
+
 async function createInvoiceForOrder(orderId: string, restaurantId: string) {
   const { data: order, error: orderError } = await supabaseAdmin
     .from('orders')
@@ -71,6 +91,7 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string) {
     .insert({
       restaurant_id: restaurantId,
       order_id: orderId,
+      invoice_number: await generateInvoiceNumber(restaurantId),
       subtotal,
       tax_amount: taxAmount,
       grand_total: grandTotal,
@@ -107,9 +128,14 @@ async function reconcileCompletedOrders(restaurantId: string) {
     return items.length > 0 && !invoicedOrderIds.has(order.id)
   })
 
-  await Promise.all(
+  const results = await Promise.all(
     missingInvoiceOrders.map((order) => createInvoiceForOrder(order.id, restaurantId))
   )
+
+  const failed = results.find((result) => result.error)
+  if (failed?.error) {
+    throw new Error(failed.error)
+  }
 }
 
 export async function GET(request: Request) {
