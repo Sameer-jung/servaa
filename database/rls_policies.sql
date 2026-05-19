@@ -70,6 +70,11 @@ CREATE POLICY "restaurants_select_staff"
     OR is_restaurant_staff(id)
   );
 
+-- Customers can view active restaurants when opening QR menu links
+CREATE POLICY "restaurants_select_public_active"
+  ON restaurants FOR SELECT
+  USING (is_active = true);
+
 -- Only owner can update their restaurant
 CREATE POLICY "restaurants_update_owner"
   ON restaurants FOR UPDATE

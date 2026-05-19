@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import { notFound, unstable_rethrow } from 'next/navigation'
 import { MenuClient } from './MenuClient'
 
 interface MenuPageProps {
@@ -34,12 +34,16 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
     const supabase = await createClient()
 
     // Get restaurant
-    const { data: restaurant } = await supabase
+    const { data: restaurant, error: restaurantError } = await supabase
       .from('restaurants')
       .select('*')
       .eq('slug', restaurantSlug)
       .eq('is_active', true)
       .single()
+
+    if (restaurantError) {
+      console.error('Failed to load restaurant menu:', restaurantError)
+    }
 
     if (!restaurant) {
       notFound()
@@ -48,18 +52,23 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
     // Get table
     let table = null
     if (tableNumber) {
-      const { data: tableData } = await supabase
+      const { data: tableData, error: tableError } = await supabase
         .from('tables')
         .select('*')
         .eq('restaurant_id', restaurant.id)
         .eq('table_number', tableNumber)
         .eq('is_active', true)
         .single()
+
+      if (tableError) {
+        console.error('Failed to load table for menu:', tableError)
+      }
+
       table = tableData
     }
 
     // Get categories and items
-    const [{ data: categories }, { data: items }] = await Promise.all([
+    const [{ data: categories, error: categoriesError }, { data: items, error: itemsError }] = await Promise.all([
       supabase
         .from('menu_categories')
         .select('*')
@@ -72,10 +81,18 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
         .order('sort_order'),
     ])
 
+    if (categoriesError) {
+      console.error('Failed to load menu categories:', categoriesError)
+    }
+
+    if (itemsError) {
+      console.error('Failed to load menu items:', itemsError)
+    }
+
     // Get active orders for this table
     let activeOrders = null
     if (table) {
-      const { data: orders } = await supabase
+      const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .eq('table_id', table.id)
@@ -83,6 +100,11 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
+
+      if (ordersError) {
+        console.error('Failed to load active table order:', ordersError)
+      }
+
       activeOrders = orders
     }
 
@@ -96,6 +118,10 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
       />
     )
   } catch (error) {
+    unstable_rethrow(error)
+
+    console.error('Failed to render menu page:', error)
+
     // If Supabase is not configured, show a helpful message
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
