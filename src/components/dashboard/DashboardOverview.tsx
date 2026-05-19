@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
 import { useRealtimeOrders } from '@/hooks/useRealtime'
-import { formatCurrency, formatTimeAgo } from '@/utils/format'
+import { formatCurrency, formatDate, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
 import { OrderStatus, OrderWithItems } from '@/types'
 
@@ -84,6 +85,9 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
 export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
   const [stats, setStats] = useState<DashboardStats>(emptyStats)
   const [recentOrders, setRecentOrders] = useState<OrderWithItems[]>([])
+  const [selectedTable, setSelectedTable] = useState<TableSummary | null>(null)
+  const [tableHistory, setTableHistory] = useState<OrderWithItems[]>([])
+  const [loadingTableHistory, setLoadingTableHistory] = useState(false)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
@@ -187,6 +191,28 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
     [recentOrders]
   )
 
+  const openTableHistory = async (table: TableSummary) => {
+    setSelectedTable(table)
+    setTableHistory(table.orders)
+    setLoadingTableHistory(true)
+
+    const { data } = await supabase
+      .from('orders')
+      .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
+      .eq('restaurant_id', restaurantId)
+      .eq('table_id', table.tableId)
+      .order('created_at', { ascending: false })
+
+    setTableHistory(((data as OrderWithItems[] | null) || []).filter((order) => !isServiceRequestOrder(order)))
+    setLoadingTableHistory(false)
+  }
+
+  const closeTableHistory = () => {
+    setSelectedTable(null)
+    setTableHistory([])
+    setLoadingTableHistory(false)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -206,7 +232,12 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
         {recentTableSummaries.length > 0 ? (
           <div className="space-y-3">
             {recentTableSummaries.map((table) => (
-              <div key={table.tableId} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+              <button
+                key={table.tableId}
+                type="button"
+                onClick={() => openTableHistory(table)}
+                className="block w-full rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -219,18 +250,81 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                     <p className="mt-2 truncate text-sm font-medium text-gray-900">
                       {table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'} for this table
                     </p>
+                    <p className="mt-1 text-xs text-gray-500">Click to view full order history</p>
                   </div>
                   <p className="flex-shrink-0 text-sm font-bold text-gray-900">
                     {formatCurrency(table.total)}
                   </p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
           <EmptyState title="No orders yet" description="Orders will appear here when customers start ordering." icon={<svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
         )}
       </div>
+
+      <Modal
+        isOpen={Boolean(selectedTable)}
+        onClose={closeTableHistory}
+        title={selectedTable ? `Table ${selectedTable.tableNumber} Order History` : 'Order History'}
+        className="max-h-[85vh] overflow-y-auto"
+      >
+        <div className="space-y-4">
+          {loadingTableHistory && (
+            <p className="text-sm text-gray-500">Loading order history...</p>
+          )}
+
+          {!loadingTableHistory && tableHistory.length === 0 && (
+            <EmptyState title="No order history" description="This table has no food orders yet." />
+          )}
+
+          {!loadingTableHistory && tableHistory.length > 0 && (
+            <div className="space-y-3">
+              {tableHistory.map((order) => (
+                <div key={order.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">
+                          Order #{order.id.slice(0, 8)}
+                        </span>
+                        <Badge status={order.status}>{order.status}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Placed {formatDate(order.created_at)}
+                      </p>
+                    </div>
+                    <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+                      {formatCurrency(order.total_amount || 0)}
+                    </p>
+                  </div>
+
+                  {order.items?.length > 0 ? (
+                    <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
+                          <span className="font-medium text-gray-900">{item.quantity}x</span>
+                          <span className="min-w-0 truncate text-gray-600">
+                            {item.menu_item?.name || 'Item'}
+                          </span>
+                          <span className="font-medium text-gray-900">
+                            {formatCurrency((item.price_snapshot || 0) * item.quantity)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-500">
+                      No items recorded for this order.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
