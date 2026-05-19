@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { OrderStatus } from '@/types'
+import { useState } from 'react'
+import { OrderItem, OrderStatus } from '@/types'
 import { useOrderStatus } from '@/hooks/useRealtime'
 import { cn } from '@/utils/cn'
+import { formatCurrency } from '@/utils/format'
 
 const statusSteps: { status: OrderStatus; label: string }[] = [
   { status: 'pending', label: 'Received' },
@@ -16,9 +17,18 @@ const statusSteps: { status: OrderStatus; label: string }[] = [
 interface OrderTrackerProps {
   orderId: string
   initialStatus?: OrderStatus
+  items?: OrderItem[]
+  totalAmount?: number
+  currency?: string
 }
 
-export function OrderTracker({ orderId, initialStatus = 'pending' }: OrderTrackerProps) {
+export function OrderTracker({
+  orderId,
+  initialStatus = 'pending',
+  items = [],
+  totalAmount = 0,
+  currency,
+}: OrderTrackerProps) {
   const [status, setStatus] = useState<OrderStatus>(initialStatus)
 
   useOrderStatus(orderId, (newStatus) => {
@@ -76,6 +86,30 @@ export function OrderTracker({ orderId, initialStatus = 'pending' }: OrderTracke
           )
         })}
       </div>
+
+      {items.length > 0 && (
+        <div className="mt-4 border-t border-gray-100 pt-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-900">Your items</p>
+            <p className="text-sm font-bold text-gray-900">
+              {formatCurrency(totalAmount, currency)}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {items.map((item) => (
+              <div key={item.id} className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
+                <span className="font-medium text-gray-900">{item.quantity}x</span>
+                <span className="min-w-0 truncate text-gray-600">
+                  {item.menu_item?.name || 'Item'}
+                </span>
+                <span className="font-medium text-gray-900">
+                  {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

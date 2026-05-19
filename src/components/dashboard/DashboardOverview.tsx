@@ -101,6 +101,32 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
     fetchOverview()
   }, [fetchOverview])
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`dashboard-overview-items:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items',
+        },
+        () => {
+          fetchOverview(false)
+        }
+      )
+      .subscribe()
+
+    const interval = window.setInterval(() => {
+      fetchOverview(false)
+    }, 15000)
+
+    return () => {
+      window.clearInterval(interval)
+      supabase.removeChannel(channel)
+    }
+  }, [fetchOverview, restaurantId, supabase])
+
   useRealtimeOrders(restaurantId, useCallback((update) => {
     fetchOverview(false)
 

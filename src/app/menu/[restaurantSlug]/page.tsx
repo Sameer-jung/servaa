@@ -94,7 +94,7 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
     if (table) {
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
-        .select('*')
+        .select('*, items:order_items(*, menu_item:menu_items(name, price))')
         .eq('table_id', table.id)
         .in('status', ['pending', 'accepted', 'preparing', 'ready'])
         .order('created_at', { ascending: false })

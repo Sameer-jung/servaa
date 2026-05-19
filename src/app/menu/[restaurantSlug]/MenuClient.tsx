@@ -54,7 +54,13 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder }
       {/* Active Order Tracker */}
       {trackedOrder && table && (
         <div className="px-4 pt-3">
-          <OrderTracker orderId={trackedOrder.id} initialStatus={trackedOrder.status} />
+          <OrderTracker
+            orderId={trackedOrder.id}
+            initialStatus={trackedOrder.status}
+            items={trackedOrder.items || []}
+            totalAmount={trackedOrder.total_amount || 0}
+            currency={restaurant.currency}
+          />
         </div>
       )}
 

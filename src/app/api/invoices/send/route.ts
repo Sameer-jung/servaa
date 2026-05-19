@@ -1,5 +1,29 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
+
+async function verifyRestaurantAccess(userId: string, restaurantId: string) {
+  const supabase = await createClient()
+
+  const { data: ownedRestaurant } = await supabase
+    .from('restaurants')
+    .select('id')
+    .eq('id', restaurantId)
+    .eq('owner_id', userId)
+    .maybeSingle()
+
+  if (ownedRestaurant) return true
+
+  const { data: staffMember } = await supabase
+    .from('staff_members')
+    .select('id')
+    .eq('restaurant_id', restaurantId)
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  return Boolean(staffMember)
+}
 
 export async function POST(request: Request) {
   try {
@@ -16,9 +40,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('invoices')
-      .select('id')
+      .select('id, restaurant_id')
       .eq('id', invoiceId)
       .maybeSingle()
 
@@ -30,7 +54,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    const { error: updateError } = await supabase
+    const hasAccess = await verifyRestaurantAccess(user.id, invoice.restaurant_id)
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { error: updateError } = await supabaseAdmin
       .from('invoices')
       .update({ notes: 'sent_to_table' })
       .eq('id', invoiceId)

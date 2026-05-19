@@ -51,9 +51,10 @@ export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartP
       notes: item.notes || null,
     }))
 
-    const { error: itemsError } = await supabase
+    const { data: insertedItems, error: itemsError } = await supabase
       .from('order_items')
       .insert(orderItems)
+      .select('*, menu_item:menu_items(*)')
 
     if (itemsError) {
       setError(itemsError.message)
@@ -64,6 +65,7 @@ export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartP
     onOrderPlaced?.({
       ...(order as Order),
       total_amount: cart.totalPrice,
+      items: insertedItems || [],
     })
     cart.clearCart()
     setPlacing(false)
