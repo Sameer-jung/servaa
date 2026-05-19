@@ -106,30 +106,39 @@ export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartP
 
         <div className="max-h-32 space-y-2 overflow-y-auto">
           {cart.items.map((item) => (
-            <div key={item.menuItem.id} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gray-900">{item.menuItem.name}</p>
-                <p className="text-xs text-gray-500">{formatCurrency(item.menuItem.price)} each</p>
+            <div key={item.menuItem.id} className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">{item.menuItem.name}</p>
+                  <p className="text-xs text-gray-500">{formatCurrency(item.menuItem.price)} each</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cart.updateQuantity(item.menuItem.id, item.quantity - 1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm"
+                  >
+                    -
+                  </button>
+                  <span className="min-w-[1.25rem] text-center text-sm font-semibold text-gray-900">
+                    {item.quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => cart.updateQuantity(item.menuItem.id, item.quantity + 1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => cart.updateQuantity(item.menuItem.id, item.quantity - 1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm"
-                >
-                  -
-                </button>
-                <span className="min-w-[1.25rem] text-center text-sm font-semibold text-gray-900">
-                  {item.quantity}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => cart.updateQuantity(item.menuItem.id, item.quantity + 1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm"
-                >
-                  +
-                </button>
-              </div>
+              <input
+                type="text"
+                value={item.notes || ''}
+                onChange={(event) => cart.updateNotes(item.menuItem.id, event.target.value)}
+                placeholder="Add note"
+                className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
             </div>
           ))}
         </div>

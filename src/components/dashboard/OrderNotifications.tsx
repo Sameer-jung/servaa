@@ -18,6 +18,7 @@ type NotificationOrderItem = {
   id: string
   quantity: number
   price_snapshot: number
+  notes?: string | null
   menu_item?: {
     name?: string | null
   } | null
@@ -97,7 +98,7 @@ export function OrderNotifications() {
           for (let attempt = 0; attempt < 3; attempt += 1) {
             const { data } = await supabase
               .from('orders')
-              .select('id, table_id, total_amount, special_instructions, table:tables(table_number), items:order_items(id, quantity, price_snapshot, menu_item:menu_items(name))')
+              .select('id, table_id, total_amount, special_instructions, table:tables(table_number), items:order_items(id, quantity, price_snapshot, notes, menu_item:menu_items(name))')
               .eq('id', order.id)
               .eq('restaurant_id', restaurant.id)
               .maybeSingle()
@@ -135,12 +136,19 @@ export function OrderNotifications() {
                 <div className="mt-3 space-y-2">
                   {items.length > 0 ? (
                     items.map((item) => (
-                      <div key={item.id} className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
-                        <span className="font-medium text-gray-900">{item.quantity}x</span>
-                        <span className="truncate text-gray-700">{item.menu_item?.name || 'Item'}</span>
-                        <span className="font-medium text-gray-900">
-                          {formatCurrency((item.price_snapshot || 0) * item.quantity, restaurant.currency)}
-                        </span>
+                      <div key={item.id} className="space-y-0.5">
+                        <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
+                          <span className="font-medium text-gray-900">{item.quantity}x</span>
+                          <span className="truncate text-gray-700">{item.menu_item?.name || 'Item'}</span>
+                          <span className="font-medium text-gray-900">
+                            {formatCurrency((item.price_snapshot || 0) * item.quantity, restaurant.currency)}
+                          </span>
+                        </div>
+                        {item.notes && (
+                          <p className="pl-6 text-xs font-medium text-red-600">
+                            Note: {item.notes}
+                          </p>
+                        )}
                       </div>
                     ))
                   ) : (

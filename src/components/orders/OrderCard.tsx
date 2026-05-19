@@ -83,13 +83,20 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact }
       {!compact && order.items && order.items.length > 0 && (
         <div className="mt-3 space-y-1">
           {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-gray-600">
-                {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
-              </span>
-              <span className="text-gray-500">
-                {formatCurrency((item.price_snapshot || 0) * item.quantity)}
-              </span>
+            <div key={item.id} className="space-y-0.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-600">
+                  {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
+                </span>
+                <span className="text-gray-500">
+                  {formatCurrency((item.price_snapshot || 0) * item.quantity)}
+                </span>
+              </div>
+              {item.notes && (
+                <p className="text-xs font-medium text-red-600">
+                  Note: {item.notes}
+                </p>
+              )}
             </div>
           ))}
         </div>

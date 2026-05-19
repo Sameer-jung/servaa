@@ -1,11 +1,20 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { RegisterForm } from '@/components/auth/RegisterForm'
+import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'Create Account - QR Order',
 }
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect('/dashboard')
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">

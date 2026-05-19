@@ -303,14 +303,21 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                   {order.items?.length > 0 ? (
                     <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
                       {order.items.map((item) => (
-                        <div key={item.id} className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
-                          <span className="font-medium text-gray-900">{item.quantity}x</span>
-                          <span className="min-w-0 truncate text-gray-600">
-                            {item.menu_item?.name || 'Item'}
-                          </span>
-                          <span className="font-medium text-gray-900">
-                            {formatCurrency((item.price_snapshot || 0) * item.quantity)}
-                          </span>
+                        <div key={item.id} className="space-y-0.5">
+                          <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
+                            <span className="font-medium text-gray-900">{item.quantity}x</span>
+                            <span className="min-w-0 truncate text-gray-600">
+                              {item.menu_item?.name || 'Item'}
+                            </span>
+                            <span className="font-medium text-gray-900">
+                              {formatCurrency((item.price_snapshot || 0) * item.quantity)}
+                            </span>
+                          </div>
+                          {item.notes && (
+                            <p className="pl-6 text-xs font-medium text-red-600">
+                              Note: {item.notes}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
