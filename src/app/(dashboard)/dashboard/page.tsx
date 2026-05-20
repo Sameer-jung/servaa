@@ -95,5 +95,11 @@ export default async function DashboardPage() {
     )
   }
 
-  return <DashboardOverview restaurantId={restaurantId} />
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('currency')
+    .eq('id', restaurantId)
+    .maybeSingle()
+
+  return <DashboardOverview restaurantId={restaurantId} currency={restaurant?.currency || 'NPR'} />
 }

@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       .in('order_id', orderIds)
       .eq('payment_status', 'unpaid')
       .or('sent_to_table_at.not.is.null,notes.eq.sent_to_table')
+      .is('acknowledged_by_table_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()

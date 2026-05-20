@@ -104,3 +104,152 @@ Date: 2026-05-20
 Status: production candidate after applying `database/safe_refactor_v1.sql` and completing a full build in CI.
 
 The implemented changes are tightly scoped and backward-compatible, but production should not be marked fully ready until the additive DB migration has run and CI confirms the build.
+
+# ============================================================
+# LIVE FIX PASS - INVOICE POPUP, TABLE ERRORS, CURRENCY, SUPER ADMIN ANALYSIS
+# ============================================================
+
+Date: 2026-05-20
+
+## Scope
+
+This pass only addressed:
+- repeating customer invoice popup after acknowledgement
+- duplicate table number user-facing error message
+- restaurant currency configurability and dynamic display
+- Super Admin feasibility analysis only
+
+## Exact Files Changed
+
+- `database/schema.sql`
+- `database/currency_defaults_v1.sql`
+- `src/app/api/invoices/table/route.ts`
+- `src/components/menu/TableInvoice.tsx`
+- `src/app/(dashboard)/dashboard/tables/page.tsx`
+- `src/app/(dashboard)/dashboard/settings/page.tsx`
+- `src/utils/format.ts`
+- `src/app/(dashboard)/dashboard/billing/page.tsx`
+- `src/components/billing/InvoiceDetail.tsx`
+- `src/components/billing/InvoiceCard.tsx`
+- `src/app/menu/[restaurantSlug]/MenuClient.tsx`
+- `src/components/menu/MenuItemCard.tsx`
+- `src/components/menu/StickyCart.tsx`
+- `src/components/orders/OrderCard.tsx`
+- `src/app/(dashboard)/dashboard/orders/page.tsx`
+- `src/app/(dashboard)/dashboard/menu/page.tsx`
+- `src/components/dashboard/DashboardOverview.tsx`
+- `src/app/(dashboard)/dashboard/page.tsx`
+
+## Root Cause Analysis
+
+### Repeating Invoice Popup
+
+Root cause: `PATCH /api/invoices/table` acknowledged an invoice by writing `acknowledged_by_table_at`, but `GET /api/invoices/table` still selected any unpaid invoice where `sent_to_table_at` was present or legacy `notes = 'sent_to_table'`. Because acknowledgement does not clear `sent_to_table_at`, polling continued to return the same invoice, reopening the modal.
+
+Fix:
+- `GET /api/invoices/table` now excludes rows where `acknowledged_by_table_at` is not null.
+- `TableInvoice` now stores acknowledged invoice IDs in `sessionStorage` per table.
+- `TableInvoice` also guards against an in-flight acknowledgement race so polling cannot reopen the same invoice before the database update is visible.
+- Polling remains in place.
+- Billing realtime and polling behavior was not removed.
+
+### Duplicate Table Error
+
+Root cause: the tables page displayed the raw Supabase/PostgreSQL unique constraint error directly.
+
+Fix:
+- `src/app/(dashboard)/dashboard/tables/page.tsx` now maps Postgres code `23505` and the `tables_restaurant_id_table_number_key` constraint message to: `Table number already exists for this restaurant.`
+- The DB unique constraint remains intact.
+- There is no separate table-create API in the current codebase; table creation is still a direct Supabase UI write, so the UI-level handler is the active production path.
+
+### Hard-Coded / Default Currency
+
+Root cause: some invoice/order/menu display paths called `formatCurrency` without passing `restaurant.currency`, causing the formatter default to decide the symbol instead of the restaurant configuration. Settings also did not expose currency editing.
+
+Fix:
+- Settings now includes a simple currency selector.
+- Settings saves `restaurants.currency`.
+- `formatCurrency` defaults safely to `NPR` and falls back to `NPR` if an invalid currency code is supplied.
+- Fresh schema default changed from `USD` to `NPR`.
+- Existing/missing restaurant currency values are handled by `database/currency_defaults_v1.sql`.
+- Billing, invoice detail/card, dashboard overview, orders, order cards, dashboard menu, public menu item cards, and sticky cart now pass restaurant currency where available.
+
+## Migration Details
+
+New migration:
+- `database/currency_defaults_v1.sql`
+
+Migration behavior:
+- Sets future `restaurants.currency` default to `NPR`.
+- Updates only restaurants where `currency IS NULL` or blank.
+- Does not overwrite explicit existing currency values.
+
+Apply after prior migrations:
+1. `database/safe_refactor_v1.sql`
+2. `database/currency_defaults_v1.sql`
+
+## Risks
+
+- A full `npm run build` was started but interrupted by the user twice, so build validation for this pass is not recorded as complete.
+- `npx tsc --noEmit` passed after the code changes.
+- Existing restaurants with explicit `USD` remain `USD`; the migration only defaults null/blank currencies to `NPR`.
+- Browser `sessionStorage` can be unavailable in strict browser modes, but the server-side `acknowledged_by_table_at IS NULL` filter is the primary fix.
+
+## Validation Results
+
+- `npx tsc --noEmit`: passed.
+- `npm run build`: not completed because the command was interrupted by the user.
+- Manual code-path validation completed for:
+  - customer invoice modal -> GET `/api/invoices/table`
+  - table acknowledgement -> PATCH `/api/invoices/table`
+  - repeated polling fallback after acknowledgement
+  - table creation duplicate error handling
+  - restaurant currency settings save path
+  - currency display call sites touched in this pass
+
+## Super Admin Feasibility Analysis Only
+
+No Super Admin implementation was added.
+
+Can platform-level Super Admin exist cleanly?
+- Yes, but not cleanly with only the current `restaurants.owner_id` and `staff_members` tenant model. A platform-level role should be separate from restaurant staff roles so tenant permissions and platform permissions do not blur.
+
+Current architecture:
+- `restaurants.owner_id` identifies the restaurant owner.
+- `staff_members` grants restaurant-scoped access using `restaurant_id`, `user_id`, and role values.
+- RLS helper functions such as `is_restaurant_staff` and `is_restaurant_owner` are tenant-scoped.
+- Most dashboard reads depend on finding one restaurant for the current user.
+
+Needed future changes:
+- Add a separate platform-level admin table, for example `platform_admins(user_id, role, is_active, created_at)`.
+- Add RLS helper functions such as `is_platform_admin()`.
+- Update RLS policies table-by-table to allow platform admins where appropriate.
+- Add admin-only APIs or dashboard routes for cross-tenant views.
+- Update dashboard restaurant resolution so platform admins can choose a tenant instead of implicitly loading one restaurant.
+- Add audit logging for platform admin actions.
+
+Would current RLS support it?
+- Not directly. Current RLS is restaurant-scoped and does not include platform-level bypass checks. Super Admin would require additive RLS helper functions and policy changes.
+
+Future risks:
+- Cross-tenant data exposure if platform role checks are mixed into existing staff logic too casually.
+- Owner/staff UX confusion if Super Admin users also appear as restaurant staff.
+- Dangerous write access without audit logs.
+- Support workflows may need read-only impersonation rather than direct mutation.
+
+Tables/permissions likely needing future changes:
+- `restaurants`
+- `staff_members`
+- `tables`
+- `menu_categories`
+- `menu_items`
+- `orders`
+- `order_items`
+- `invoices`
+- `service_requests`
+- any future billing/subscription/platform settings tables
+
+Recommended future approach:
+- Keep Super Admin separate from `staff_members`.
+- Start with read-only cross-tenant access.
+- Add audited write actions only where there is a clear operational need.

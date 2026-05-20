@@ -210,7 +210,7 @@ function MenuContent() {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">{formatCurrency(item.price)}</p>
+                  <p className="text-sm text-gray-500">{formatCurrency(item.price, restaurant?.currency)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

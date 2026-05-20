@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 
+const currencyOptions = ['NPR', 'USD', 'INR', 'EUR', 'GBP', 'AUD', 'CAD']
+
 export default function SettingsPage() {
   const { restaurant, loading } = useRestaurant()
   const [saving, setSaving] = useState(false)
@@ -32,6 +34,7 @@ export default function SettingsPage() {
       address: (form.elements.namedItem('address') as HTMLInputElement).value,
       phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
       tax_rate: parseFloat((form.elements.namedItem('tax_rate') as HTMLInputElement).value) || 0,
+      currency: (form.elements.namedItem('currency') as HTMLSelectElement).value || 'NPR',
     }
 
     await supabase.from('restaurants').update(data).eq('id', restaurant.id)
@@ -95,6 +98,20 @@ export default function SettingsPage() {
           max="100"
           defaultValue={restaurant?.tax_rate || 0}
         />
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">Currency</label>
+          <select
+            name="currency"
+            defaultValue={restaurant?.currency || 'NPR'}
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          >
+            {currencyOptions.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="pt-2">
           <Button type="submit" isLoading={saving}>
             {saved ? 'Saved!' : 'Save Changes'}

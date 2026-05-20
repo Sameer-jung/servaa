@@ -11,10 +11,11 @@ interface StickyCartProps {
   restaurantId: string
   tableId: string
   tableToken?: string
+  currency?: string
   onOrderPlaced?: (order: Order) => void
 }
 
-export function StickyCart({ restaurantId, tableId, tableToken, onOrderPlaced }: StickyCartProps) {
+export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrderPlaced }: StickyCartProps) {
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState(false)
   const [error, setError] = useState('')
@@ -137,7 +138,7 @@ export function StickyCart({ restaurantId, tableId, tableToken, onOrderPlaced }:
               {cart.totalItems} {cart.totalItems === 1 ? 'item' : 'items'} selected
             </p>
           </div>
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(cart.totalPrice)}</p>
+          <p className="text-lg font-bold text-gray-900">{formatCurrency(cart.totalPrice, currency)}</p>
         </div>
 
         <div className="max-h-32 space-y-2 overflow-y-auto">
@@ -146,7 +147,7 @@ export function StickyCart({ restaurantId, tableId, tableToken, onOrderPlaced }:
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-900">{item.menuItem.name}</p>
-                  <p className="text-xs text-gray-500">{formatCurrency(item.menuItem.price)} each</p>
+                  <p className="text-xs text-gray-500">{formatCurrency(item.menuItem.price, currency)} each</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

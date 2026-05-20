@@ -11,6 +11,7 @@ interface OrderCardProps {
   onReject?: () => void
   onUpdateStatus?: (status: string) => void
   compact?: boolean
+  currency?: string
 }
 
 const statusActions: Record<string, { next: string; label: string; color: string }> = {
@@ -33,7 +34,7 @@ function getItemSummary(order: OrderWithItems) {
     : visibleItems.join(', ')
 }
 
-export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact }: OrderCardProps) {
+export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, currency }: OrderCardProps) {
   const action = statusActions[order.status]
   const tableNumber = order.table?.table_number || 'Unknown'
 
@@ -54,7 +55,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact }
             </p>
           </div>
           <p className="flex-shrink-0 text-sm font-bold text-gray-900">
-            {formatCurrency(order.total_amount || 0)}
+            {formatCurrency(order.total_amount || 0, currency)}
           </p>
         </div>
       </div>
@@ -76,7 +77,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact }
           </p>
         </div>
         <p className="text-lg font-bold text-gray-900 flex-shrink-0">
-          {formatCurrency(order.total_amount || 0)}
+          {formatCurrency(order.total_amount || 0, currency)}
         </p>
       </div>
 
@@ -89,7 +90,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact }
                   {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
                 </span>
                 <span className="text-gray-500">
-                  {formatCurrency((item.price_snapshot || 0) * item.quantity)}
+                  {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
                 </span>
               </div>
               {item.notes && (

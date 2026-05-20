@@ -80,6 +80,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               key={item.id}
               item={item}
               quantity={getItemQuantity(item.id)}
+              currency={restaurant.currency}
               onAdd={() => cart.addItem(item)}
               onRemove={() => cart.updateQuantity(item.id, getItemQuantity(item.id) - 1)}
             />
@@ -98,6 +99,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             restaurantId={restaurant.id}
             tableId={table.id}
             tableToken={tableToken}
+            currency={restaurant.currency}
             onOrderPlaced={setTrackedOrder}
           />
           {!hasCartItems && <CustomerActions restaurantId={restaurant.id} tableId={table.id} tableToken={tableToken} />}

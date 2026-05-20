@@ -57,9 +57,10 @@ interface BillingTableGroupProps {
   onView: (invoice: Invoice) => void
   onMarkPaid?: (invoiceId: string) => void
   onSendToTable: (invoiceId: string) => void
+  currency?: string
 }
 
-function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable }: BillingTableGroupProps) {
+function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency }: BillingTableGroupProps) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -70,7 +71,7 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable }: Billing
           </p>
         </div>
         <p className="flex-shrink-0 text-lg font-bold text-gray-900">
-          {formatCurrency(group.total)}
+          {formatCurrency(group.total, currency)}
         </p>
       </div>
 
@@ -86,7 +87,7 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable }: Billing
                 <p className="mt-1 text-xs text-gray-500">{formatDate(invoice.created_at)}</p>
               </div>
               <p className="flex-shrink-0 text-sm font-bold text-gray-900">
-                {formatCurrency(invoice.grand_total)}
+                {formatCurrency(invoice.grand_total, currency)}
               </p>
             </div>
 
@@ -254,6 +255,7 @@ function BillingContent() {
                 onView={(invoice) => { setSelectedInvoice(invoice); setShowDetail(true) }}
                 onMarkPaid={handleMarkPaid}
                 onSendToTable={handleSendToTable}
+                currency={restaurant?.currency}
               />
             ))}
             <div className="flex items-center justify-between gap-3">
@@ -293,6 +295,7 @@ function BillingContent() {
                 group={group}
                 onView={(invoice) => { setSelectedInvoice(invoice); setShowDetail(true) }}
                 onSendToTable={handleSendToTable}
+                currency={restaurant?.currency}
               />
             ))}
             <div className="flex items-center justify-between gap-3">
@@ -328,6 +331,7 @@ function BillingContent() {
         onClose={() => setShowDetail(false)}
         onMarkPaid={selectedInvoice?.payment_status === 'unpaid' ? () => handleMarkPaid(selectedInvoice.id) : undefined}
         onSendToTable={selectedInvoice ? () => handleSendToTable(selectedInvoice.id) : undefined}
+        currency={restaurant?.currency}
       />
     </div>
   )

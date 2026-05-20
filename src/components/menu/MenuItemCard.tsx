@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/Button'
 interface MenuItemCardProps {
   item: MenuItem
   quantity: number
+  currency?: string
   onAdd: () => void
   onRemove: () => void
 }
 
-export function MenuItemCard({ item, quantity, onAdd, onRemove }: MenuItemCardProps) {
+export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: MenuItemCardProps) {
   const isAvailable = item.available
 
   return (
@@ -46,7 +47,7 @@ export function MenuItemCard({ item, quantity, onAdd, onRemove }: MenuItemCardPr
           )}
         </div>
         <div className="flex items-center justify-between">
-          <p className="font-semibold text-gray-900">{formatCurrency(item.price)}</p>
+          <p className="font-semibold text-gray-900">{formatCurrency(item.price, currency)}</p>
           {!isAvailable ? (
             <Button size="sm" variant="secondary" disabled>
               Out of Stock

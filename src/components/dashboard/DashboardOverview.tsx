@@ -14,6 +14,7 @@ import { OrderStatus, OrderWithItems } from '@/types'
 
 interface DashboardOverviewProps {
   restaurantId: string
+  currency?: string
 }
 
 interface DashboardStats {
@@ -79,7 +80,7 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
   )
 }
 
-export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
+export function DashboardOverview({ restaurantId, currency }: DashboardOverviewProps) {
   const [stats, setStats] = useState<DashboardStats>(emptyStats)
   const [recentOrders, setRecentOrders] = useState<OrderWithItems[]>([])
   const [recentPage, setRecentPage] = useState(0)
@@ -229,7 +230,7 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard title="Active Orders" value={loading ? '...' : stats.activeOrders} icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
         <StatCard title="Active Tables" value={loading ? '...' : stats.activeTables} icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>} />
-        <StatCard title="Today Sales" value={loading ? '...' : formatCurrency(stats.todaySales)} subtitle="Completed orders" icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
+        <StatCard title="Today Sales" value={loading ? '...' : formatCurrency(stats.todaySales, currency)} subtitle="Completed orders" icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
         <StatCard title="Pending" value={loading ? '...' : stats.pendingOrders} icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
       </div>
 
@@ -259,7 +260,7 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                     <p className="mt-1 text-xs text-gray-500">Click to view full order history</p>
                   </div>
                   <p className="flex-shrink-0 text-sm font-bold text-gray-900">
-                    {formatCurrency(table.total)}
+                    {formatCurrency(table.total, currency)}
                   </p>
                 </div>
               </button>
@@ -324,7 +325,7 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                       </p>
                     </div>
                     <p className="flex-shrink-0 text-sm font-bold text-gray-900">
-                      {formatCurrency(order.total_amount || 0)}
+                      {formatCurrency(order.total_amount || 0, currency)}
                     </p>
                   </div>
 
@@ -338,7 +339,7 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
                               {item.menu_item?.name || 'Item'}
                             </span>
                             <span className="font-medium text-gray-900">
-                              {formatCurrency((item.price_snapshot || 0) * item.quantity)}
+                              {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
                             </span>
                           </div>
                           {item.notes && (

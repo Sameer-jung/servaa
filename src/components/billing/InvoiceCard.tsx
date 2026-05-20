@@ -8,9 +8,10 @@ interface InvoiceCardProps {
   onMarkPaid?: () => void
   onView?: () => void
   onSendToTable?: () => void
+  currency?: string
 }
 
-export function InvoiceCard({ invoice, onMarkPaid, onView, onSendToTable }: InvoiceCardProps) {
+export function InvoiceCard({ invoice, onMarkPaid, onView, onSendToTable, currency }: InvoiceCardProps) {
   const tableNumber = invoice.order?.table?.table_number || 'Unknown'
 
   return (
@@ -31,22 +32,22 @@ export function InvoiceCard({ invoice, onMarkPaid, onView, onSendToTable }: Invo
           </p>
         </div>
         <p className="text-lg font-bold text-gray-900">
-          {formatCurrency(invoice.grand_total)}
+          {formatCurrency(invoice.grand_total, currency)}
         </p>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
         <div className="rounded-lg bg-gray-50 p-2">
           <p className="text-gray-500">Subtotal</p>
-          <p className="font-medium text-gray-900">{formatCurrency(invoice.subtotal)}</p>
+          <p className="font-medium text-gray-900">{formatCurrency(invoice.subtotal, currency)}</p>
         </div>
         <div className="rounded-lg bg-gray-50 p-2">
           <p className="text-gray-500">Tax</p>
-          <p className="font-medium text-gray-900">{formatCurrency(invoice.tax_amount)}</p>
+          <p className="font-medium text-gray-900">{formatCurrency(invoice.tax_amount, currency)}</p>
         </div>
         <div className="rounded-lg bg-gray-50 p-2">
           <p className="text-gray-500">Total</p>
-          <p className="font-medium text-gray-900">{formatCurrency(invoice.grand_total)}</p>
+          <p className="font-medium text-gray-900">{formatCurrency(invoice.grand_total, currency)}</p>
         </div>
       </div>
 

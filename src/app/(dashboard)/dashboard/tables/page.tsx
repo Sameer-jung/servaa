@@ -11,6 +11,17 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { QRCodeDisplay } from '@/components/tables/QRCodeDisplay'
 import { Table } from '@/types'
 
+function getTableErrorMessage(error: { code?: string; message?: string } | null) {
+  if (!error) return ''
+
+  const message = error.message || ''
+  if (error.code === '23505' || message.includes('tables_restaurant_id_table_number_key')) {
+    return 'Table number already exists for this restaurant.'
+  }
+
+  return message || 'Failed to save table.'
+}
+
 function TablesContent() {
   const [tables, setTables] = useState<Table[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,7 +65,7 @@ function TablesContent() {
       .single()
 
     if (tableError) {
-      setError(tableError.message)
+      setError(getTableErrorMessage(tableError))
       return
     }
 

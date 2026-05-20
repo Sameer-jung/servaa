@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Invoice } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency } from '@/utils/format'
@@ -13,6 +13,34 @@ interface TableInvoiceProps {
 
 export function TableInvoice({ tableId, tableToken, currency }: TableInvoiceProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const acknowledgingInvoiceIdRef = useRef<string | null>(null)
+
+  const getAcknowledgedInvoiceIds = useCallback(() => {
+    if (typeof window === 'undefined') return new Set<string>()
+
+    try {
+      const stored = window.sessionStorage.getItem(`servaa:acknowledged-invoices:${tableId}`)
+      const invoiceIds = stored ? JSON.parse(stored) : []
+      return new Set(Array.isArray(invoiceIds) ? invoiceIds.filter((id) => typeof id === 'string') : [])
+    } catch {
+      return new Set<string>()
+    }
+  }, [tableId])
+
+  const rememberAcknowledgedInvoice = useCallback((invoiceId: string) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const invoiceIds = getAcknowledgedInvoiceIds()
+      invoiceIds.add(invoiceId)
+      window.sessionStorage.setItem(
+        `servaa:acknowledged-invoices:${tableId}`,
+        JSON.stringify(Array.from(invoiceIds).slice(-25))
+      )
+    } catch {
+      // Session storage can be unavailable in strict browser modes.
+    }
+  }, [getAcknowledgedInvoiceIds, tableId])
 
   const fetchInvoice = useCallback(async () => {
     const params = new URLSearchParams({ tableId })
@@ -24,21 +52,37 @@ export function TableInvoice({ tableId, tableToken, currency }: TableInvoiceProp
     const result = await response.json().catch(() => null)
     const nextInvoice = (result?.invoice as Invoice | null) || null
 
+    if (
+      nextInvoice &&
+      (getAcknowledgedInvoiceIds().has(nextInvoice.id) || acknowledgingInvoiceIdRef.current === nextInvoice.id)
+    ) {
+      setInvoice(null)
+      return
+    }
+
     setInvoice(nextInvoice)
-  }, [tableId, tableToken])
+  }, [getAcknowledgedInvoiceIds, tableId, tableToken])
 
   const handleGotIt = async () => {
     if (!invoice) return
 
     const invoiceId = invoice.id
+    acknowledgingInvoiceIdRef.current = invoiceId
     setInvoice(null)
 
-    await fetch('/api/invoices/table', {
+    const response = await fetch('/api/invoices/table', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ invoiceId, tableId, tableToken }),
     })
 
+    if (response.ok) {
+      rememberAcknowledgedInvoice(invoiceId)
+      acknowledgingInvoiceIdRef.current = null
+      return
+    }
+
+    acknowledgingInvoiceIdRef.current = null
     fetchInvoice()
   }
 

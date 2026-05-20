@@ -9,9 +9,10 @@ interface InvoiceDetailProps {
   onClose: () => void
   onMarkPaid?: () => void
   onSendToTable?: () => void
+  currency?: string
 }
 
-export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTable }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTable, currency }: InvoiceDetailProps) {
   if (!invoice) return null
 
   return (
@@ -41,7 +42,7 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
               <span className="text-gray-600">
                 {item.quantity}x {item.menu_item?.name || 'Item'}
               </span>
-              <span className="text-gray-900">{formatCurrency(item.price_snapshot * item.quantity)}</span>
+              <span className="text-gray-900">{formatCurrency(item.price_snapshot * item.quantity, currency)}</span>
             </div>
           ))}
         </div>
@@ -49,15 +50,15 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
         <div className="border-t border-gray-100 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Subtotal</span>
-            <span>{formatCurrency(invoice.subtotal)}</span>
+            <span>{formatCurrency(invoice.subtotal, currency)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Tax</span>
-            <span>{formatCurrency(invoice.tax_amount)}</span>
+            <span>{formatCurrency(invoice.tax_amount, currency)}</span>
           </div>
           <div className="flex justify-between text-lg font-bold">
             <span>Grand Total</span>
-            <span>{formatCurrency(invoice.grand_total)}</span>
+            <span>{formatCurrency(invoice.grand_total, currency)}</span>
           </div>
         </div>
 

@@ -91,6 +91,7 @@ interface TableOrderCardProps {
   onAccept: (orderId: string) => void
   onReject: (orderId: string) => void
   onUpdateStatus: (orderId: string, status: string) => void
+  currency?: string
 }
 
 function TableOrderCard({
@@ -100,6 +101,7 @@ function TableOrderCard({
   onAccept,
   onReject,
   onUpdateStatus,
+  currency,
 }: TableOrderCardProps) {
   const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
 
@@ -120,7 +122,7 @@ function TableOrderCard({
           </p>
         </div>
         <div className="flex-shrink-0 text-right">
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.total)}</p>
+          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.total, currency)}</p>
           <p className="mt-1 text-xs text-gray-500">{expanded ? 'Hide' : 'View'} orders</p>
         </div>
       </button>
@@ -134,6 +136,7 @@ function TableOrderCard({
               onAccept={() => onAccept(order.id)}
               onReject={() => onReject(order.id)}
               onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+              currency={currency}
             />
           ))}
         </div>
@@ -302,6 +305,7 @@ function OrdersContent() {
               onAccept={handleAccept}
               onReject={handleReject}
               onUpdateStatus={handleUpdateStatus}
+              currency={restaurant?.currency}
             />
           ))}
           <div className="flex items-center justify-between gap-3">

@@ -16,7 +16,7 @@ CREATE TABLE restaurants (
   address TEXT,
   phone TEXT,
   tax_rate DECIMAL(5,2) DEFAULT 0.00,
-  currency TEXT DEFAULT 'USD',
+  currency TEXT DEFAULT 'NPR',
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
