@@ -1,29 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-
-async function verifyRestaurantAccess(userId: string, restaurantId: string) {
-  const supabase = await createClient()
-
-  const { data: ownedRestaurant } = await supabase
-    .from('restaurants')
-    .select('id')
-    .eq('id', restaurantId)
-    .eq('owner_id', userId)
-    .maybeSingle()
-
-  if (ownedRestaurant) return true
-
-  const { data: staffMember } = await supabase
-    .from('staff_members')
-    .select('id')
-    .eq('restaurant_id', restaurantId)
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
-
-  return Boolean(staffMember)
-}
+import { writeAuditLog } from '@/utils/audit'
+import { hasRestaurantAccess } from '@/utils/roles'
 
 export async function POST(request: Request) {
   try {
@@ -54,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    const hasAccess = await verifyRestaurantAccess(user.id, invoice.restaurant_id)
+    const hasAccess = await hasRestaurantAccess(supabase, invoice.restaurant_id, user.id)
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -70,6 +49,14 @@ export async function POST(request: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    void writeAuditLog(supabaseAdmin, {
+      restaurantId: invoice.restaurant_id,
+      actorUserId: user.id,
+      action: 'invoice.sent_to_table',
+      entityType: 'invoice',
+      entityId: invoiceId,
+    })
 
     return NextResponse.json({ ok: true })
   } catch {

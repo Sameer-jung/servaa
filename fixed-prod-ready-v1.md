@@ -46,13 +46,10 @@ Date: 2026-05-20
 - Updated billing to debounce invoice realtime refreshes and add a polling fallback only when realtime is not healthy.
 - Polling and realtime were preserved; no subscriptions or fallback paths were removed.
 
-### RBAC Expansion
-- Expanded staff role values in schema/types to include:
+### RBAC Scope
+- Staff role values are limited to:
   - `owner`
   - `staff`
-  - `manager`
-  - `cashier`
-  - `kitchen`
 - Existing owner/staff behavior is preserved.
 
 ## DB Changes
@@ -253,3 +250,108 @@ Recommended future approach:
 - Keep Super Admin separate from `staff_members`.
 - Start with read-only cross-tenant access.
 - Add audited write actions only where there is a clear operational need.
+
+# ============================================================
+# LIVE FIX PASS - OWNER/STAFF RBAC AND LIGHTWEIGHT AUDIT LOGGING
+# ============================================================
+
+Date: 2026-05-20
+
+## Scope
+
+This pass only addressed:
+- keeping staff roles limited to `owner` and `staff`
+- adding a small reusable owner/staff helper
+- adding minimal audit logs for critical business actions
+- preserving existing auth, RLS, ordering, billing, and dashboard behavior
+
+## Exact Files Changed
+
+- `database/schema.sql`
+- `database/rls_policies.sql`
+- `database/safe_refactor_v1.sql`
+- `database/audit_logs_v1.sql`
+- `src/types/database.ts`
+- `src/types/index.ts`
+- `src/utils/roles.ts`
+- `src/utils/audit.ts`
+- `src/app/api/orders/route.ts`
+- `src/app/api/invoices/route.ts`
+- `src/app/api/invoices/send/route.ts`
+- `src/app/(dashboard)/dashboard/orders/page.tsx`
+- `src/app/(dashboard)/dashboard/menu/page.tsx`
+- `src/app/(dashboard)/dashboard/page.tsx`
+- `src/components/auth/RegisterForm.tsx`
+- `src/components/menu/StickyCart.tsx`
+
+## Role Control
+
+- `StaffRole` is now only `owner | staff`.
+- `database/schema.sql` and `database/safe_refactor_v1.sql` now keep `staff_members.role` constrained to `owner` and `staff`.
+- `database/audit_logs_v1.sql` normalizes null or previously-expanded role values to `staff` before applying the owner/staff-only check constraint.
+- No dashboard access flow or RLS helper was rewritten.
+
+## Shared Role Helper
+
+Added `src/utils/roles.ts` with:
+- `getUserRole`
+- `isOwner`
+- `isStaff`
+- `hasRestaurantAccess`
+
+The helper treats active non-owner staff rows as `staff`, so unexpected/null-like values do not create new permission tiers.
+
+## Audit Logging
+
+Added `audit_logs` support with:
+- `id`
+- `restaurant_id`
+- `actor_user_id`
+- `action`
+- `entity_type`
+- `entity_id`
+- `metadata`
+- `created_at`
+
+New migration:
+- `database/audit_logs_v1.sql`
+
+Logged actions:
+- `invoice.created`
+- `invoice.sent_to_table`
+- `invoice.marked_paid`
+- `order.created`
+- `order.status_changed`
+- `menu_item.created`
+- `menu_item.updated`
+- `menu_item.deleted`
+- `staff.added`
+
+No staff removal UI exists in the current codebase, so no staff removal call site was added.
+
+## Audit Safety
+
+- Audit writes use `writeAuditLog` in `src/utils/audit.ts`.
+- Logging failures are caught and ignored.
+- Audit writes do not change API response shapes.
+- No external service or analytics system was added.
+- Public ordering through `POST /api/orders` logs with `actor_user_id = null`.
+- Legacy cart fallback attempts a silent audit write; if RLS rejects it, ordering still succeeds.
+
+## Migration Details
+
+Apply:
+1. `database/safe_refactor_v1.sql` if not already applied
+2. `database/audit_logs_v1.sql`
+
+`database/audit_logs_v1.sql` is additive for audit logs and safely narrows staff roles back to owner/staff by converting null or unsupported role values to `staff`.
+
+## Validation Results
+
+- `npx tsc --noEmit`: passed.
+- `npm run build`: not run in this pass.
+
+## Risks
+
+- Audit logging is best-effort. If RLS rejects a client-side audit write, the business action still completes.
+- Existing data with unsupported role strings will be treated as `staff` by the migration, matching the requested owner/staff-only model.

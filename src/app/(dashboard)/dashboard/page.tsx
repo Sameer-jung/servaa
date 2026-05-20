@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview'
 import { redirect } from 'next/navigation'
+import { writeAuditLog } from '@/utils/audit'
 
 
 export const metadata = {
@@ -64,11 +65,22 @@ export default async function DashboardPage() {
                 .single()
 
               if (restaurant) {
-                await supabase.from('staff_members').insert({
+                const { error: staffError } = await supabase.from('staff_members').insert({
                   restaurant_id: restaurant.id,
                   user_id: user.id,
                   role: 'owner',
                 })
+
+                if (!staffError) {
+                  void writeAuditLog(supabase, {
+                    restaurantId: restaurant.id,
+                    actorUserId: user.id,
+                    action: 'staff.added',
+                    entityType: 'staff_member',
+                    entityId: user.id,
+                    metadata: { role: 'owner' },
+                  })
+                }
               }
             }}
             className="mt-6 space-y-4 text-left"

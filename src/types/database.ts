@@ -342,12 +342,44 @@ export interface Database {
           created_at?: string
         }
       }
+      audit_logs: {
+        Row: {
+          id: string
+          restaurant_id: string
+          actor_user_id: string | null
+          action: string
+          entity_type: string
+          entity_id: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          actor_user_id?: string | null
+          action: string
+          entity_type: string
+          entity_id: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          actor_user_id?: string | null
+          action?: string
+          entity_type?: string
+          entity_id?: string
+          metadata?: Json
+          created_at?: string
+        }
+      }
     }
   }
 }
 
 export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'
-export type StaffRole = 'owner' | 'staff' | 'manager' | 'cashier' | 'kitchen'
+export type StaffRole = 'owner' | 'staff'
 export type ServiceRequestType = 'water' | 'bill'
 export type ServiceRequestStatus = 'pending' | 'acknowledged' | 'completed' | 'cancelled'

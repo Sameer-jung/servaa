@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
 import { isUuid, readTrimmedString, validateOrderItems } from '@/utils/validation'
+import { writeAuditLog } from '@/utils/audit'
 
 export async function POST(request: Request) {
   try {
@@ -108,6 +109,19 @@ export async function POST(request: Request) {
       await supabaseAdmin.from('orders').delete().eq('id', order.id)
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
+
+    void writeAuditLog(supabaseAdmin, {
+      restaurantId,
+      actorUserId: null,
+      action: 'order.created',
+      entityType: 'order',
+      entityId: order.id,
+      metadata: {
+        table_id: tableId,
+        item_count: insertedItems?.length || 0,
+        total_amount: totalAmount,
+      },
+    })
 
     return NextResponse.json({
       order: {

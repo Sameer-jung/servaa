@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { OrderStatus, OrderWithItems } from '@/types'
+import { writeAuditLog } from '@/utils/audit'
 
 const tabs = [
   { id: 'active', label: 'Active' },
@@ -246,12 +247,30 @@ function OrdersContent() {
     applyOptimisticStatus(orderId, 'accepted')
     const { error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId)
     if (error) fetchOrders()
+    if (!error && restaurant) {
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'order.status_changed',
+        entityType: 'order',
+        entityId: orderId,
+        metadata: { status: 'accepted' },
+      })
+    }
   }
 
   const handleReject = async (orderId: string) => {
     applyOptimisticStatus(orderId, 'cancelled')
     const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
     if (error) fetchOrders()
+    if (!error && restaurant) {
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'order.status_changed',
+        entityType: 'order',
+        entityId: orderId,
+        metadata: { status: 'cancelled' },
+      })
+    }
   }
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
@@ -261,6 +280,16 @@ function OrdersContent() {
     if (error) {
       fetchOrders()
       return
+    }
+
+    if (restaurant) {
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'order.status_changed',
+        entityType: 'order',
+        entityId: orderId,
+        metadata: { status: nextStatus },
+      })
     }
 
     if (nextStatus === 'completed' && restaurant) {

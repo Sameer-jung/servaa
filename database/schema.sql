@@ -183,7 +183,7 @@ CREATE TABLE staff_members (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('owner', 'staff', 'manager', 'cashier', 'kitchen')),
+  role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('owner', 'staff')),
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(restaurant_id, user_id)
@@ -191,6 +191,23 @@ CREATE TABLE staff_members (
 
 CREATE INDEX idx_staff_restaurant ON staff_members(restaurant_id);
 CREATE INDEX idx_staff_user ON staff_members(user_id);
+
+-- ============================================
+-- 10. AUDIT LOGS
+-- ============================================
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_restaurant ON audit_logs(restaurant_id, created_at DESC);
+CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 
 -- ============================================
 -- FUNCTIONS

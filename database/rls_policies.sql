@@ -12,6 +12,7 @@ ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
 -- HELPER FUNCTIONS
@@ -281,3 +282,15 @@ CREATE POLICY "staff_members_update_owner"
 CREATE POLICY "staff_members_delete_owner"
   ON staff_members FOR DELETE
   USING (is_restaurant_owner(restaurant_id));
+
+-- ============================================
+-- AUDIT LOGS POLICIES
+-- ============================================
+
+CREATE POLICY "audit_logs_insert_staff"
+  ON audit_logs FOR INSERT
+  WITH CHECK (is_restaurant_staff(restaurant_id));
+
+CREATE POLICY "audit_logs_select_staff"
+  ON audit_logs FOR SELECT
+  USING (is_restaurant_staff(restaurant_id));

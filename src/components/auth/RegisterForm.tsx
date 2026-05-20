@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { generateSlug } from '@/utils/format'
+import { writeAuditLog } from '@/utils/audit'
 
 export function RegisterForm() {
   const [restaurantName, setRestaurantName] = useState('')
@@ -104,11 +105,22 @@ export function RegisterForm() {
 
     setDebugInfo('Adding permissions...')
 
-    await supabase.from('staff_members').insert({
+    const { error: staffError } = await supabase.from('staff_members').insert({
       restaurant_id: newRestaurant.id,
       user_id: user.id,
       role: 'owner',
     })
+
+    if (!staffError) {
+      void writeAuditLog(supabase, {
+        restaurantId: newRestaurant.id,
+        actorUserId: user.id,
+        action: 'staff.added',
+        entityType: 'staff_member',
+        entityId: user.id,
+        metadata: { role: 'owner' },
+      })
+    }
 
     setDebugInfo('Done! Redirecting...')
     setLoading(false)

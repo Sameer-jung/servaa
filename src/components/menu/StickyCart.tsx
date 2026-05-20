@@ -6,6 +6,7 @@ import { formatCurrency } from '@/utils/format'
 import { Button } from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
 import { Order } from '@/types'
+import { writeAuditLog } from '@/utils/audit'
 
 interface StickyCartProps {
   restaurantId: string
@@ -103,6 +104,18 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
       ...(order as Order),
       total_amount: cart.totalPrice,
       items: insertedItems || [],
+    })
+    void writeAuditLog(supabase, {
+      restaurantId,
+      actorUserId: null,
+      action: 'order.created',
+      entityType: 'order',
+      entityId: order.id,
+      metadata: {
+        table_id: tableId,
+        item_count: insertedItems?.length || 0,
+        total_amount: cart.totalPrice,
+      },
     })
     cart.clearCart()
     setPlacing(false)

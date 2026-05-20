@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoading } from '@/components/dashboard/PageLoading'
 import { MenuCategory, MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
+import { writeAuditLog } from '@/utils/audit'
 
 function MenuContent() {
   const [categories, setCategories] = useState<MenuCategory[]>([])
@@ -85,13 +86,32 @@ function MenuContent() {
     }
 
     if (editingItem) {
-      await supabase.from('menu_items').update(data).eq('id', editingItem.id)
+      const { error } = await supabase.from('menu_items').update(data).eq('id', editingItem.id)
+      if (!error) {
+        void writeAuditLog(supabase, {
+          restaurantId: restaurant!.id,
+          action: 'menu_item.updated',
+          entityType: 'menu_item',
+          entityId: editingItem.id,
+          metadata: { name: data.name },
+        })
+      }
     } else {
-      await supabase.from('menu_items').insert({
+      const { data: newItem, error } = await supabase.from('menu_items').insert({
         ...data,
         restaurant_id: restaurant!.id,
         sort_order: items.length,
-      })
+      }).select('id').maybeSingle()
+
+      if (!error && newItem) {
+        void writeAuditLog(supabase, {
+          restaurantId: restaurant!.id,
+          action: 'menu_item.created',
+          entityType: 'menu_item',
+          entityId: newItem.id,
+          metadata: { name: data.name },
+        })
+      }
     }
 
     setShowItemModal(false)
@@ -101,7 +121,15 @@ function MenuContent() {
 
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Delete this item?')) return
-    await supabase.from('menu_items').delete().eq('id', id)
+    const { error } = await supabase.from('menu_items').delete().eq('id', id)
+    if (!error && restaurant) {
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'menu_item.deleted',
+        entityType: 'menu_item',
+        entityId: id,
+      })
+    }
     fetchData()
   }
 
