@@ -7,21 +7,25 @@ import { formatCurrency } from '@/utils/format'
 
 interface TableInvoiceProps {
   tableId: string
+  tableToken?: string
   currency: string
 }
 
-export function TableInvoice({ tableId, currency }: TableInvoiceProps) {
+export function TableInvoice({ tableId, tableToken, currency }: TableInvoiceProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
   const fetchInvoice = useCallback(async () => {
-    const response = await fetch(`/api/invoices/table?tableId=${encodeURIComponent(tableId)}`)
+    const params = new URLSearchParams({ tableId })
+    if (tableToken) params.set('tableToken', tableToken)
+
+    const response = await fetch(`/api/invoices/table?${params.toString()}`)
     if (!response.ok) return
 
     const result = await response.json().catch(() => null)
     const nextInvoice = (result?.invoice as Invoice | null) || null
 
     setInvoice(nextInvoice)
-  }, [tableId])
+  }, [tableId, tableToken])
 
   const handleGotIt = async () => {
     if (!invoice) return
@@ -32,7 +36,7 @@ export function TableInvoice({ tableId, currency }: TableInvoiceProps) {
     await fetch('/api/invoices/table', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId, tableId }),
+      body: JSON.stringify({ invoiceId, tableId, tableToken }),
     })
 
     fetchInvoice()

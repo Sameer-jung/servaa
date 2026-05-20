@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 
 
 export const metadata = {
-  title: 'Dashboard - QR Order',
+  title: 'Dashboard - Servaa',
 }
 
 export default async function DashboardPage() {

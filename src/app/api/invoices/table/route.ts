@@ -1,13 +1,35 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
+import { readTrimmedString } from '@/utils/validation'
+
+async function validateTableAccess(tableId: string, token: string | null) {
+  if (!token) return true
+
+  const { data: table, error } = await supabaseAdmin
+    .from('tables')
+    .select('id')
+    .eq('id', tableId)
+    .eq('qr_token_hash', hashTableAccessToken(token))
+    .maybeSingle()
+
+  if (error) throw error
+  return Boolean(table)
+}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const tableId = searchParams.get('tableId')
+    const tableToken = readTrimmedString(searchParams.get('tableToken'), 256) || getBearerToken(request)
 
     if (!tableId) {
       return NextResponse.json({ error: 'Missing tableId' }, { status: 400 })
+    }
+
+    const hasTableAccess = await validateTableAccess(tableId, tableToken)
+    if (!hasTableAccess) {
+      return NextResponse.json({ error: 'Table not found' }, { status: 404 })
     }
 
     const { data: orders, error: ordersError } = await supabaseAdmin
@@ -31,7 +53,7 @@ export async function GET(request: Request) {
       .select('*, order:orders(*, items:order_items(*, menu_item:menu_items(name)))')
       .in('order_id', orderIds)
       .eq('payment_status', 'unpaid')
-      .eq('notes', 'sent_to_table')
+      .or('sent_to_table_at.not.is.null,notes.eq.sent_to_table')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -48,10 +70,16 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { invoiceId, tableId } = await request.json()
+    const { invoiceId, tableId, tableToken: rawTableToken } = await request.json()
+    const tableToken = readTrimmedString(rawTableToken, 256) || getBearerToken(request)
 
     if (!invoiceId || !tableId) {
       return NextResponse.json({ error: 'Missing invoiceId or tableId' }, { status: 400 })
+    }
+
+    const hasTableAccess = await validateTableAccess(tableId, tableToken)
+    if (!hasTableAccess) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
     const { data: invoice, error: invoiceError } = await supabaseAdmin
@@ -74,7 +102,10 @@ export async function PATCH(request: Request) {
 
     const { error: updateError } = await supabaseAdmin
       .from('invoices')
-      .update({ notes: 'acknowledged_by_table' })
+      .update({
+        notes: 'acknowledged_by_table',
+        acknowledged_by_table_at: new Date().toISOString(),
+      })
       .eq('id', invoiceId)
 
     if (updateError) {

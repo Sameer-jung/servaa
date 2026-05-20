@@ -10,10 +10,11 @@ import { Order } from '@/types'
 interface StickyCartProps {
   restaurantId: string
   tableId: string
+  tableToken?: string
   onOrderPlaced?: (order: Order) => void
 }
 
-export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartProps) {
+export function StickyCart({ restaurantId, tableId, tableToken, onOrderPlaced }: StickyCartProps) {
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState(false)
   const [error, setError] = useState('')
@@ -26,6 +27,40 @@ export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartP
     setError('')
     setPlacing(true)
 
+    const clientRequestId =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId,
+          tableId,
+          tableToken,
+          clientRequestId,
+          items: cart.items.map((item) => ({
+            menuItemId: item.menuItem.id,
+            quantity: item.quantity,
+            notes: item.notes || null,
+          })),
+        }),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (response.ok && result?.order) {
+        onOrderPlaced?.(result.order as Order)
+        cart.clearCart()
+        setPlacing(false)
+        setPlaced(true)
+        return
+      }
+    } catch {
+      // Fall through to the legacy direct Supabase path while the API migrates.
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
@@ -33,6 +68,7 @@ export function StickyCart({ restaurantId, tableId, onOrderPlaced }: StickyCartP
         table_id: tableId,
         status: 'pending',
         total_amount: cart.totalPrice,
+        client_request_id: clientRequestId,
       })
       .select()
       .single()

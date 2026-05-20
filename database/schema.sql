@@ -33,12 +33,17 @@ CREATE TABLE tables (
   restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   table_number TEXT NOT NULL,
   qr_code TEXT,
+  qr_code_data_url TEXT,
+  qr_url TEXT,
+  qr_token_hash TEXT,
+  qr_token_created_at TIMESTAMPTZ,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(restaurant_id, table_number)
 );
 
 CREATE INDEX idx_tables_restaurant ON tables(restaurant_id);
+CREATE INDEX idx_tables_qr_token_hash ON tables(qr_token_hash);
 
 -- ============================================
 -- 3. MENU CATEGORIES
@@ -90,6 +95,8 @@ CREATE TABLE orders (
   special_instructions TEXT,
   customer_name TEXT,
   customer_phone TEXT,
+  customer_session_id TEXT,
+  client_request_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -98,6 +105,9 @@ CREATE INDEX idx_orders_restaurant ON orders(restaurant_id);
 CREATE INDEX idx_orders_table ON orders(table_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_created ON orders(created_at DESC);
+CREATE UNIQUE INDEX idx_orders_client_request
+  ON orders(restaurant_id, table_id, client_request_id)
+  WHERE client_request_id IS NOT NULL;
 
 -- ============================================
 -- 6. ORDER ITEMS
@@ -130,6 +140,9 @@ CREATE TABLE invoices (
   payment_status payment_status DEFAULT 'unpaid',
   payment_method TEXT,
   notes TEXT,
+  sent_to_table_at TIMESTAMPTZ,
+  acknowledged_by_table_at TIMESTAMPTZ,
+  table_session_token_hash TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   paid_at TIMESTAMPTZ,
   UNIQUE(restaurant_id, invoice_number)
@@ -138,15 +151,39 @@ CREATE TABLE invoices (
 CREATE INDEX idx_invoices_restaurant ON invoices(restaurant_id);
 CREATE INDEX idx_invoices_order ON invoices(order_id);
 CREATE INDEX idx_invoices_payment ON invoices(payment_status);
+CREATE INDEX idx_invoices_sent_to_table ON invoices(sent_to_table_at);
 
 -- ============================================
--- 8. STAFF MEMBERS (for multi-staff access)
+-- 8. SERVICE REQUESTS
+-- ============================================
+CREATE TYPE service_request_type AS ENUM ('water', 'bill');
+CREATE TYPE service_request_status AS ENUM ('pending', 'acknowledged', 'completed', 'cancelled');
+
+CREATE TABLE service_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  table_id UUID NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+  request_type service_request_type NOT NULL,
+  status service_request_status DEFAULT 'pending',
+  notes TEXT,
+  legacy_order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+  customer_session_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_service_requests_restaurant ON service_requests(restaurant_id);
+CREATE INDEX idx_service_requests_table ON service_requests(table_id);
+CREATE INDEX idx_service_requests_status ON service_requests(status);
+
+-- ============================================
+-- 9. STAFF MEMBERS (for multi-staff access)
 -- ============================================
 CREATE TABLE staff_members (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('owner', 'staff')),
+  role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('owner', 'staff', 'manager', 'cashier', 'kitchen')),
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(restaurant_id, user_id)
@@ -178,6 +215,10 @@ CREATE TRIGGER update_menu_items_updated_at
 
 CREATE TRIGGER update_orders_updated_at
   BEFORE UPDATE ON orders
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_service_requests_updated_at
+  BEFORE UPDATE ON service_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Calculate order total
@@ -248,6 +289,7 @@ CREATE TRIGGER set_invoice_number
 ALTER TABLE orders REPLICA IDENTITY FULL;
 ALTER TABLE order_items REPLICA IDENTITY FULL;
 ALTER TABLE invoices REPLICA IDENTITY FULL;
+ALTER TABLE service_requests REPLICA IDENTITY FULL;
 
 -- ============================================
 -- SEED DATA (optional - for testing)

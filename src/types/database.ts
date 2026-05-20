@@ -56,6 +56,10 @@ export interface Database {
           restaurant_id: string
           table_number: string
           qr_code: string | null
+          qr_code_data_url: string | null
+          qr_url: string | null
+          qr_token_hash: string | null
+          qr_token_created_at: string | null
           is_active: boolean
           created_at: string
         }
@@ -64,6 +68,10 @@ export interface Database {
           restaurant_id: string
           table_number: string
           qr_code?: string | null
+          qr_code_data_url?: string | null
+          qr_url?: string | null
+          qr_token_hash?: string | null
+          qr_token_created_at?: string | null
           is_active?: boolean
           created_at?: string
         }
@@ -72,6 +80,10 @@ export interface Database {
           restaurant_id?: string
           table_number?: string
           qr_code?: string | null
+          qr_code_data_url?: string | null
+          qr_url?: string | null
+          qr_token_hash?: string | null
+          qr_token_created_at?: string | null
           is_active?: boolean
           created_at?: string
         }
@@ -150,6 +162,8 @@ export interface Database {
           special_instructions: string | null
           customer_name: string | null
           customer_phone: string | null
+          customer_session_id: string | null
+          client_request_id: string | null
           created_at: string
           updated_at: string
         }
@@ -162,6 +176,8 @@ export interface Database {
           special_instructions?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_session_id?: string | null
+          client_request_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -174,6 +190,8 @@ export interface Database {
           special_instructions?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_session_id?: string | null
+          client_request_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -219,6 +237,9 @@ export interface Database {
           payment_status: PaymentStatus
           payment_method: string | null
           notes: string | null
+          sent_to_table_at: string | null
+          acknowledged_by_table_at: string | null
+          table_session_token_hash: string | null
           created_at: string
           paid_at: string | null
         }
@@ -233,6 +254,9 @@ export interface Database {
           payment_status?: PaymentStatus
           payment_method?: string | null
           notes?: string | null
+          sent_to_table_at?: string | null
+          acknowledged_by_table_at?: string | null
+          table_session_token_hash?: string | null
           created_at?: string
           paid_at?: string | null
         }
@@ -247,8 +271,49 @@ export interface Database {
           payment_status?: PaymentStatus
           payment_method?: string | null
           notes?: string | null
+          sent_to_table_at?: string | null
+          acknowledged_by_table_at?: string | null
+          table_session_token_hash?: string | null
           created_at?: string
           paid_at?: string | null
+        }
+      }
+      service_requests: {
+        Row: {
+          id: string
+          restaurant_id: string
+          table_id: string
+          request_type: ServiceRequestType
+          status: ServiceRequestStatus
+          notes: string | null
+          legacy_order_id: string | null
+          customer_session_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          table_id: string
+          request_type: ServiceRequestType
+          status?: ServiceRequestStatus
+          notes?: string | null
+          legacy_order_id?: string | null
+          customer_session_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          table_id?: string
+          request_type?: ServiceRequestType
+          status?: ServiceRequestStatus
+          notes?: string | null
+          legacy_order_id?: string | null
+          customer_session_id?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
       staff_members: {
@@ -283,4 +348,6 @@ export interface Database {
 
 export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'
-export type StaffRole = 'owner' | 'staff'
+export type StaffRole = 'owner' | 'staff' | 'manager' | 'cashier' | 'kitchen'
+export type ServiceRequestType = 'water' | 'bill'
+export type ServiceRequestStatus = 'pending' | 'acknowledged' | 'completed' | 'cancelled'

@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { useRealtimeOrders } from '@/hooks/useRealtime'
+import { useDebouncedRealtimeRefresh, useRealtimeOrders } from '@/hooks/useRealtime'
 import { formatCurrency, formatDate, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
 import { OrderStatus, OrderWithItems } from '@/types'
@@ -90,6 +90,7 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
   const [hasNextTableHistoryPage, setHasNextTableHistoryPage] = useState(false)
   const [loadingTableHistory, setLoadingTableHistory] = useState(false)
   const [loading, setLoading] = useState(true)
+  const realtimeHealthyRef = useRef(false)
   const supabase = createClient()
 
   const fetchOverview = useCallback(async (showLoading = true) => {
@@ -131,6 +132,8 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
     fetchOverview()
   }, [fetchOverview])
 
+  const refreshSoon = useDebouncedRealtimeRefresh(() => fetchOverview(false))
+
   useEffect(() => {
     const channel = supabase
       .channel(`dashboard-overview-items:${restaurantId}`)
@@ -141,29 +144,31 @@ export function DashboardOverview({ restaurantId }: DashboardOverviewProps) {
           schema: 'public',
           table: 'order_items',
         },
-        () => {
-          fetchOverview(false)
-        }
+        () => refreshSoon()
       )
-      .subscribe()
+      .subscribe((status) => {
+        realtimeHealthyRef.current = status === 'SUBSCRIBED'
+      })
 
     const interval = window.setInterval(() => {
-      fetchOverview(false)
+      if (!realtimeHealthyRef.current) {
+        fetchOverview(false)
+      }
     }, 15000)
 
     return () => {
       window.clearInterval(interval)
       supabase.removeChannel(channel)
     }
-  }, [fetchOverview, restaurantId, supabase])
+  }, [fetchOverview, refreshSoon, restaurantId, supabase])
 
   useRealtimeOrders(restaurantId, useCallback((update) => {
-    fetchOverview(false)
+    refreshSoon()
 
     if (update.type === 'DELETE') {
       setRecentOrders((prev) => prev.filter((order) => order.id !== update.orderId))
     }
-  }, [fetchOverview]))
+  }, [refreshSoon]))
 
   const recentTableSummaries = useMemo(
     () => groupOrdersByTable(recentOrders.filter((order) => !isServiceRequestOrder(order))).slice(0, 5),

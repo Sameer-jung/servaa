@@ -8,9 +8,10 @@ import { Modal } from '@/components/ui/Modal'
 interface CustomerActionsProps {
   restaurantId: string
   tableId: string
+  tableToken?: string
 }
 
-export function CustomerActions({ restaurantId, tableId }: CustomerActionsProps) {
+export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerActionsProps) {
   const [requesting, setRequesting] = useState<'water' | 'bill' | null>(null)
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [showOrderFirst, setShowOrderFirst] = useState(false)
@@ -42,17 +43,37 @@ export function CustomerActions({ restaurantId, tableId }: CustomerActionsProps)
       }
     }
 
-    const { error } = await supabase.from('orders').insert({
+    const serviceRequest = await supabase
+      .from('service_requests')
+      .insert({
+        restaurant_id: restaurantId,
+        table_id: tableId,
+        request_type: type,
+        status: 'pending',
+        customer_session_id: tableToken || null,
+      })
+      .select('id')
+      .maybeSingle()
+
+    const { data: legacyOrder, error } = await supabase.from('orders').insert({
       restaurant_id: restaurantId,
       table_id: tableId,
       status: 'pending',
       total_amount: 0,
       special_instructions: type === 'water' ? 'REQUEST: Water' : 'REQUEST: Bill',
-    })
+      customer_session_id: tableToken || null,
+    }).select('id').maybeSingle()
+
+    if (serviceRequest.data?.id && legacyOrder?.id) {
+      await supabase
+        .from('service_requests')
+        .update({ legacy_order_id: legacyOrder.id })
+        .eq('id', serviceRequest.data.id)
+    }
 
     setRequesting(null)
 
-    if (!error) {
+    if (!error || serviceRequest.data) {
       setConfirmed(type)
       setTimeout(() => setConfirmed(null), 3000)
     }

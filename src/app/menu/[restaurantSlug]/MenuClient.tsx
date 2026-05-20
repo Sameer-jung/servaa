@@ -16,9 +16,10 @@ interface MenuClientProps {
   categories: MenuCategory[]
   items: MenuItem[]
   activeOrder: Order | null
+  tableToken?: string
 }
 
-export function MenuClient({ restaurant, table, categories, items, activeOrder }: MenuClientProps) {
+export function MenuClient({ restaurant, table, categories, items, activeOrder, tableToken }: MenuClientProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(activeOrder)
   const cart = useCartStore()
@@ -96,10 +97,11 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder }
           <StickyCart
             restaurantId={restaurant.id}
             tableId={table.id}
+            tableToken={tableToken}
             onOrderPlaced={setTrackedOrder}
           />
-          {!hasCartItems && <CustomerActions restaurantId={restaurant.id} tableId={table.id} />}
-          <TableInvoice tableId={table.id} currency={restaurant.currency} />
+          {!hasCartItems && <CustomerActions restaurantId={restaurant.id} tableId={table.id} tableToken={tableToken} />}
+          <TableInvoice tableId={table.id} tableToken={tableToken} currency={restaurant.currency} />
         </>
       )}
 

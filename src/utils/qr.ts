@@ -31,7 +31,10 @@ export function getAppBaseUrl(request?: Request): string {
   return configuredUrl.replace(/\/$/, '')
 }
 
-export function getTableQRUrl(slug: string, tableNumber: string, request?: Request): string {
+export function getTableQRUrl(slug: string, tableNumber: string, request?: Request, token?: string): string {
   const baseUrl = getAppBaseUrl(request)
-  return `${baseUrl}/menu/${slug}?table=${encodeURIComponent(tableNumber)}`
+  const url = new URL(`${baseUrl}/menu/${slug}`)
+  url.searchParams.set('table', tableNumber)
+  if (token) url.searchParams.set('t', token)
+  return url.toString()
 }

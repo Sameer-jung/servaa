@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -9,6 +9,7 @@ import { InvoiceDetail } from '@/components/billing/InvoiceDetail'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { useDebouncedRealtimeRefresh } from '@/hooks/useRealtime'
 import { Invoice } from '@/types'
 
 const pageSize = 20
@@ -120,6 +121,7 @@ function BillingContent() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [message, setMessage] = useState('')
+  const realtimeHealthyRef = useRef(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -162,6 +164,8 @@ function BillingContent() {
     fetchData()
   }, [fetchData])
 
+  const refreshSoon = useDebouncedRealtimeRefresh(fetchData)
+
   useEffect(() => {
     if (!restaurant) return
 
@@ -175,16 +179,23 @@ function BillingContent() {
           table: 'invoices',
           filter: `restaurant_id=eq.${restaurant.id}`,
         },
-        () => {
-          fetchData()
-        }
+        () => refreshSoon()
       )
-      .subscribe()
+      .subscribe((status) => {
+        realtimeHealthyRef.current = status === 'SUBSCRIBED'
+      })
+
+    const interval = window.setInterval(() => {
+      if (!realtimeHealthyRef.current) {
+        fetchData()
+      }
+    }, 30000)
 
     return () => {
+      window.clearInterval(interval)
       supabase.removeChannel(channel)
     }
-  }, [fetchData, restaurant, supabase])
+  }, [fetchData, refreshSoon, restaurant, supabase])
 
   const handleMarkPaid = async (invoiceId: string) => {
     await fetch('/api/invoices', {

@@ -10,6 +10,7 @@ ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
@@ -241,6 +242,23 @@ CREATE POLICY "invoices_update_staff"
 CREATE POLICY "invoices_delete_staff"
   ON invoices FOR DELETE
   USING (is_restaurant_staff(restaurant_id));
+
+-- ============================================
+-- SERVICE REQUESTS POLICIES
+-- ============================================
+
+CREATE POLICY "service_requests_insert_public"
+  ON service_requests FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "service_requests_select_staff"
+  ON service_requests FOR SELECT
+  USING (is_restaurant_staff(restaurant_id));
+
+CREATE POLICY "service_requests_update_staff"
+  ON service_requests FOR UPDATE
+  USING (is_restaurant_staff(restaurant_id))
+  WITH CHECK (is_restaurant_staff(restaurant_id));
 
 -- ============================================
 -- STAFF MEMBERS POLICIES

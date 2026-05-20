@@ -61,7 +61,10 @@ export async function POST(request: Request) {
 
     const { error: updateError } = await supabaseAdmin
       .from('invoices')
-      .update({ notes: 'sent_to_table' })
+      .update({
+        notes: 'sent_to_table',
+        sent_to_table_at: new Date().toISOString(),
+      })
       .eq('id', invoiceId)
 
     if (updateError) {

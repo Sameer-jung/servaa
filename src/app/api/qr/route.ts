@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateQRCodeDataUrl, getTableQRUrl } from '@/utils/qr'
+import { generateTableAccessToken, hashTableAccessToken } from '@/utils/tableSession'
 
 export async function POST(request: Request) {
   try {
@@ -35,14 +36,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Table not found or access denied' }, { status: 404 })
     }
 
-    const url = getTableQRUrl(restaurantSlug, tableNumber, request)
+    const token = generateTableAccessToken()
+    const url = getTableQRUrl(restaurantSlug, tableNumber, request, token)
     const qrCodeDataUrl = await generateQRCodeDataUrl(url)
 
-    // Store the generated PNG data URL directly. This avoids requiring a
-    // separate Supabase Storage bucket and policy just for QR codes.
+    // Keep qr_code populated for existing UI while adding token/url fields for
+    // future table-scoped API validation and storage migration.
     const { error: updateError } = await supabase
       .from('tables')
-      .update({ qr_code: qrCodeDataUrl })
+      .update({
+        qr_code: qrCodeDataUrl,
+        qr_code_data_url: qrCodeDataUrl,
+        qr_url: url,
+        qr_token_hash: hashTableAccessToken(token),
+        qr_token_created_at: new Date().toISOString(),
+      })
       .eq('id', tableId)
 
     if (updateError) {

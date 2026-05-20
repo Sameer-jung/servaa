@@ -1,6 +1,6 @@
-import { OrderStatus, PaymentStatus } from './database'
+import { OrderStatus, PaymentStatus, ServiceRequestStatus, ServiceRequestType, StaffRole } from './database'
 
-export type { OrderStatus, PaymentStatus } from './database'
+export type { OrderStatus, PaymentStatus, ServiceRequestStatus, ServiceRequestType, StaffRole } from './database'
 
 // ============================================
 // RESTAURANT
@@ -26,6 +26,10 @@ export interface Table {
   restaurant_id: string
   table_number: string
   qr_code?: string
+  qr_code_data_url?: string
+  qr_url?: string
+  qr_token_hash?: string
+  qr_token_created_at?: string
   is_active: boolean
   created_at: string
 }
@@ -102,6 +106,8 @@ export interface Order {
   special_instructions?: string
   customer_name?: string
   customer_phone?: string
+  customer_session_id?: string
+  client_request_id?: string
   created_at: string
   updated_at: string
   table?: Table
@@ -127,9 +133,26 @@ export interface Invoice {
   payment_status: PaymentStatus
   payment_method?: string
   notes?: string
+  sent_to_table_at?: string
+  acknowledged_by_table_at?: string
+  table_session_token_hash?: string
   created_at: string
   paid_at?: string
   order?: Order
+}
+
+export interface ServiceRequest {
+  id: string
+  restaurant_id: string
+  table_id: string
+  request_type: ServiceRequestType
+  status: ServiceRequestStatus
+  notes?: string
+  legacy_order_id?: string
+  customer_session_id?: string
+  created_at: string
+  updated_at: string
+  table?: Table
 }
 
 // ============================================
@@ -139,7 +162,7 @@ export interface StaffMember {
   id: string
   restaurant_id: string
   user_id: string
-  role: 'owner' | 'staff'
+  role: StaffRole
   is_active: boolean
   created_at: string
   user?: {

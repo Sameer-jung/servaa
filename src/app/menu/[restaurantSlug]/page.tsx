@@ -4,7 +4,7 @@ import { MenuClient } from './MenuClient'
 
 interface MenuPageProps {
   params: Promise<{ restaurantSlug: string }>
-  searchParams: Promise<{ table?: string }>
+  searchParams: Promise<{ table?: string; t?: string }>
 }
 
 export async function generateMetadata({ params }: MenuPageProps) {
@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: MenuPageProps) {
 
 export default async function MenuPage({ params, searchParams }: MenuPageProps) {
   const { restaurantSlug } = await params
-  const { table: tableNumber } = await searchParams
+  const { table: tableNumber, t: tableToken } = await searchParams
 
   try {
     const supabase = await createClient()
@@ -115,6 +115,7 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
         categories={categories || []}
         items={items || []}
         activeOrder={activeOrders}
+        tableToken={tableToken}
       />
     )
   } catch (error) {
