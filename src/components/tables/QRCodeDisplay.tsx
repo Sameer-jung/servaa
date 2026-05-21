@@ -67,7 +67,7 @@ export function QRCodeDisplay({ tableNumber, qrCodeUrl, restaurantName }: QRCode
               className="h-full w-full rounded-xl object-contain"
             />
           </div>
-          <p className="text-sm text-gray-500">{restaurantName} · Table {tableNumber}</p>
+          <p className="text-sm text-gray-500">{restaurantName} - Table {tableNumber}</p>
           <div className="flex w-full gap-2">
             <Button variant="outline" className="flex-1" onClick={handleDownload}>
               Download

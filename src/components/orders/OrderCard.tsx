@@ -73,7 +73,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
             <Badge status={order.status}>{order.status}</Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            Table {tableNumber} · {formatTimeAgo(order.created_at)}
+            Table {tableNumber} - {formatTimeAgo(order.created_at)}
           </p>
         </div>
         <p className="text-lg font-bold text-gray-900 flex-shrink-0">

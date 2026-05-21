@@ -163,7 +163,7 @@ export function RegisterForm() {
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        placeholder="••••••••"
+        placeholder="********"
         required
       />
       <Input
@@ -171,7 +171,7 @@ export function RegisterForm() {
         type="password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
-        placeholder="••••••••"
+        placeholder="********"
         required
       />
       <Button type="submit" isLoading={loading} className="w-full">

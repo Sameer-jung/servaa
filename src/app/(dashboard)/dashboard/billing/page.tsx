@@ -67,7 +67,7 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency 
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900">Table {group.tableNumber}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'} · latest {formatDate(group.latestCreatedAt)}
+            {group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'} - latest {formatDate(group.latestCreatedAt)}
           </p>
         </div>
         <p className="flex-shrink-0 text-lg font-bold text-gray-900">
@@ -159,7 +159,7 @@ function BillingContent() {
     setHasNextUnpaidPage(nextUnpaidInvoices.length === pageSize)
     setHasNextPaidPage(nextPaidInvoices.length === pageSize)
     setLoading(false)
-  }, [paidPage, restaurant, supabase, unpaidPage])
+  }, [paidPage, restaurant, unpaidPage])
 
   useEffect(() => {
     fetchData()

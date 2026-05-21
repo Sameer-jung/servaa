@@ -119,7 +119,7 @@ function TableOrderCard({
             <Badge status={group.status}>{group.status}</Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'} · {activeCount} active · {formatTimeAgo(group.latestCreatedAt)}
+            {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'} - {activeCount} active - {formatTimeAgo(group.latestCreatedAt)}
           </p>
         </div>
         <div className="flex-shrink-0 text-right">

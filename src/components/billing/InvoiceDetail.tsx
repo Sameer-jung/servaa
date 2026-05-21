@@ -32,7 +32,7 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-500">Payment Method</span>
-          <span className="font-medium">{invoice.payment_method || '—'}</span>
+          <span className="font-medium">{invoice.payment_method || 'N/A'}</span>
         </div>
 
         <div className="border-t border-gray-100 pt-4">

@@ -66,7 +66,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-gray-100 py-8">
         <div className="mx-auto max-w-5xl px-4 text-center text-sm text-gray-500">
-          QR Order — Built for restaurants, by restaurants.
+          QR Order - Built for restaurants, by restaurants.
         </div>
       </footer>
     </div>

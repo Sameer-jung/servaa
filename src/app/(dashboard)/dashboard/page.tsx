@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview'
 import { redirect } from 'next/navigation'
 import { writeAuditLog } from '@/utils/audit'
+import { generateSlug } from '@/utils/format'
 
 
 export const metadata = {
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
               if (!user) return
 
               const name = formData.get('name') as string
-              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+              const slug = generateSlug(name)
 
               const { data: restaurant } = await supabase
                 .from('restaurants')
