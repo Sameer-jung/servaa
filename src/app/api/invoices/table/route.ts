@@ -3,6 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
 import { readTrimmedString } from '@/utils/validation'
 
+type InvoiceOrderRelation = {
+  table_id?: string | null
+}
+
+type InvoiceWithOrderRelation = {
+  order?: InvoiceOrderRelation | InvoiceOrderRelation[] | null
+}
+
 async function validateTableAccess(tableId: string, token: string | null) {
   if (!token) return true
 
@@ -93,9 +101,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: invoiceError.message }, { status: 500 })
     }
 
-    const order = Array.isArray((invoice as any)?.order)
-      ? (invoice as any).order[0]
-      : (invoice as any)?.order
+    const invoiceWithOrder = invoice as InvoiceWithOrderRelation | null
+    const order = Array.isArray(invoiceWithOrder?.order)
+      ? invoiceWithOrder.order[0]
+      : invoiceWithOrder?.order
 
     if (!invoice || order?.table_id !== tableId) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })

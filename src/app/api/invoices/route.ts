@@ -205,7 +205,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ invoice: result.invoice })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Failed to generate invoice' },
       { status: 500 }

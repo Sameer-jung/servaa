@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element */
+
 import { MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
 import { Button } from '@/components/ui/Button'

@@ -1,8 +1,8 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 export type RestaurantRole = 'owner' | 'staff'
 
-type SupabaseLike = {
-  from: (table: string) => any
-}
+type SupabaseLike = Pick<SupabaseClient, 'from'>
 
 export async function getUserRole(
   supabase: SupabaseLike,
