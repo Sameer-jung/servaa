@@ -93,6 +93,7 @@ interface TableOrderCardProps {
   onReject: (orderId: string) => void
   onUpdateStatus: (orderId: string, status: string) => void
   currency?: string
+  updatingOrderId?: string | null
 }
 
 function TableOrderCard({
@@ -103,6 +104,7 @@ function TableOrderCard({
   onReject,
   onUpdateStatus,
   currency,
+  updatingOrderId,
 }: TableOrderCardProps) {
   const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
 
@@ -138,6 +140,7 @@ function TableOrderCard({
               onReject={() => onReject(order.id)}
               onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
               currency={currency}
+              isLoading= {updatingOrderId === order.id}
             />
           ))}
         </div>
@@ -153,6 +156,7 @@ function OrdersContent() {
   const [page, setPage] = useState(0)
   const [hasNextPage, setHasNextPage] = useState(false)
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({})
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -244,6 +248,8 @@ function OrdersContent() {
   }
 
   const handleAccept = async (orderId: string) => {
+    if(updatingOrderId) return
+    setUpdatingOrderId(orderId)
     applyOptimisticStatus(orderId, 'accepted')
     const { error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId)
     if (error) fetchOrders()
@@ -256,9 +262,12 @@ function OrdersContent() {
         metadata: { status: 'accepted' },
       })
     }
+    setUpdatingOrderId(null)
   }
 
   const handleReject = async (orderId: string) => {
+    if(updatingOrderId) return 
+    setUpdatingOrderId(orderId)
     applyOptimisticStatus(orderId, 'cancelled')
     const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
     if (error) fetchOrders()
@@ -271,14 +280,18 @@ function OrdersContent() {
         metadata: { status: 'cancelled' },
       })
     }
+    setUpdatingOrderId(null)
   }
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
+    if(updatingOrderId) return
+    setUpdatingOrderId(orderId)
     const nextStatus = status as OrderStatus
     applyOptimisticStatus(orderId, nextStatus)
     const { error } = await supabase.from('orders').update({ status: nextStatus }).eq('id', orderId)
     if (error) {
       fetchOrders()
+      setUpdatingOrderId(null)
       return
     }
 
@@ -303,6 +316,7 @@ function OrdersContent() {
         fetchOrders()
       }
     }
+    setUpdatingOrderId(null)
   }
 
   if (restaurantLoading || loading) {
@@ -335,6 +349,7 @@ function OrdersContent() {
               onReject={handleReject}
               onUpdateStatus={handleUpdateStatus}
               currency={restaurant?.currency}
+              updatingOrderId={updatingOrderId}
             />
           ))}
           <div className="flex items-center justify-between gap-3">

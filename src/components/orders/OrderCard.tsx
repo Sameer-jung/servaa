@@ -12,6 +12,7 @@ interface OrderCardProps {
   onUpdateStatus?: (status: string) => void
   compact?: boolean
   currency?: string
+  isLoading?: boolean
 }
 
 const statusActions: Record<string, { next: string; label: string; color: string }> = {
@@ -34,7 +35,7 @@ function getItemSummary(order: OrderWithItems) {
     : visibleItems.join(', ')
 }
 
-export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, currency }: OrderCardProps) {
+export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, currency, isLoading= false }: OrderCardProps) {
   const action = statusActions[order.status]
   const tableNumber = order.table?.table_number || 'Unknown'
 
@@ -112,10 +113,10 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
       <div className="mt-3 flex gap-2">
         {order.status === 'pending' && (
           <>
-            <Button size="sm" className="flex-1" onClick={onAccept}>
+            <Button size="sm" className="flex-1" isLoading={isLoading} onClick={onAccept}>
               Accept
             </Button>
-            <Button size="sm" variant="outline" className="flex-1" onClick={onReject}>
+            <Button size="sm" variant="outline" className="flex-1" disabled={isLoading} onClick={onReject}>
               Reject
             </Button>
           </>
@@ -124,6 +125,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
           <Button
             size="sm"
             className={`flex-1 ${action.color}`}
+            disabled={isLoading}
             onClick={() => onUpdateStatus(action.next)}
           >
             {action.label}

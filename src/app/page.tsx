@@ -1,7 +1,25 @@
-import Link from 'next/link'
+'use client'
+
 import { Button } from '@/components/ui/Button'
+import { useState } from 'react'
+import {useRouter} from 'next/navigation'
 
 export default function HomePage() {
+
+  const router = useRouter()
+  const [loadingAction, setLoadingAction] = useState <"register" | "login" | null> (null)
+
+  const goToRegister = () => {
+    if(loadingAction) return 
+    setLoadingAction('register')
+    router.push('/register')
+  }
+
+  const goToLogin = () => {
+    if(loadingAction) return
+    setLoadingAction('login')
+    router.push('/login')
+  }
   return (
     <div className="min-h-screen bg-white">
       {/* Hero */}
@@ -14,12 +32,14 @@ export default function HomePage() {
             The simplest in-restaurant QR ordering system for cafes and restaurants.
           </p>
           <div className="mt-8 flex justify-center gap-4">
-            <Link href="/register">
-              <Button size="lg">Get Started Free</Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline">Sign In</Button>
-            </Link>
+              <Button size="lg" isLoading = {loadingAction === "register"} onClick={goToRegister}>
+                {loadingAction === 'register' ? 'Loading...' : 'Get Started Free'}
+                </Button>
+              <Button size="lg" variant="outline" isLoading = {loadingAction === "login"} onClick={goToLogin
+
+              }>
+                {loadingAction === 'login' ? 'Loading...' : 'Sign In'}
+                </Button>
           </div>
         </div>
 
