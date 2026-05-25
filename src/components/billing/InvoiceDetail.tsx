@@ -10,9 +10,11 @@ interface InvoiceDetailProps {
   onMarkPaid?: () => void
   onSendToTable?: () => void
   currency?: string
+  sendingInvoiceId?: string | null
+  markingPaidInvoiceId?: string | null
 }
 
-export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTable, currency }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTable, currency,  sendingInvoiceId, markingPaidInvoiceId }: InvoiceDetailProps) {
   if (!invoice) return null
 
   return (
@@ -64,12 +66,12 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
 
         <div className="space-y-2">
           {onSendToTable && (
-            <Button variant="outline" className="w-full" onClick={onSendToTable}>
+            <Button variant="outline" className="w-full"     isLoading={sendingInvoiceId === invoice.id} disabled={markingPaidInvoiceId === invoice.id} onClick={onSendToTable}>
               Send to Table
             </Button>
           )}
           {invoice.payment_status === 'unpaid' && onMarkPaid && (
-            <Button className="w-full" onClick={onMarkPaid}>
+            <Button className="w-full"     isLoading={markingPaidInvoiceId === invoice.id} disabled={sendingInvoiceId === invoice.id} onClick={onMarkPaid}>
               Mark as Paid
             </Button>
           )}

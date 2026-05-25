@@ -53,14 +53,16 @@ function groupInvoicesByTable(invoices: Invoice[]): TableInvoiceGroup[] {
 }
 
 interface BillingTableGroupProps {
-  group: TableInvoiceGroup
-  onView: (invoice: Invoice) => void
-  onMarkPaid?: (invoiceId: string) => void
-  onSendToTable: (invoiceId: string) => void
-  currency?: string
+  group: TableInvoiceGroup;
+  onView: (invoice: Invoice) => void;
+  onMarkPaid?: (invoiceId: string) => void;
+  onSendToTable: (invoiceId: string) => void;
+  currency?: string;
+  isSending?: (invoiceId: string) => boolean;
+  isMarkingPaid?: (invoiceId: string) => boolean;
 }
 
-function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency }: BillingTableGroupProps) {
+function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency, isSending, isMarkingPaid  }: BillingTableGroupProps) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -95,11 +97,11 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency 
               <Button size="sm" variant="outline" className="flex-1" onClick={() => onView(invoice)}>
                 View
               </Button>
-              <Button size="sm" variant="outline" className="flex-1" onClick={() => onSendToTable(invoice.id)}>
+              <Button size="sm" variant="outline" className="flex-1" isLoading={Boolean(isSending?.(invoice.id))} disabled={Boolean(isMarkingPaid?.(invoice.id))} onClick={() => onSendToTable(invoice.id)}>
                 Send to Table
               </Button>
               {invoice.payment_status === 'unpaid' && onMarkPaid && (
-                <Button size="sm" className="flex-1" onClick={() => onMarkPaid(invoice.id)}>
+                <Button size="sm" className="flex-1"    isLoading={Boolean(isMarkingPaid?.(invoice.id))} disabled={Boolean(isSending?.(invoice.id))} onClick={() => onMarkPaid(invoice.id)}>
                   Mark Paid
                 </Button>
               )}
@@ -122,6 +124,8 @@ function BillingContent() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [message, setMessage] = useState('')
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
+  const [markingPaidInvoiceId, setMarkingPaidInvoiceId] = useState<string | null>(null)
   const realtimeHealthyRef = useRef(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
@@ -199,29 +203,46 @@ function BillingContent() {
   }, [fetchData, refreshSoon, restaurant, supabase])
 
   const handleMarkPaid = async (invoiceId: string) => {
-    await fetch('/api/invoices', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId, payment_status: 'paid' }),
-    })
-    fetchData()
-    setShowDetail(false)
+      if (markingPaidInvoiceId || sendingInvoiceId) return;
+      setMarkingPaidInvoiceId(invoiceId);
+  try {
+      await fetch('/api/invoices', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId, payment_status: 'paid' }),
+      })
+      await fetchData();
+      setShowDetail(false);
+  } finally {
+    setMarkingPaidInvoiceId(null);
+  }
+
   }
 
   const handleSendToTable = async (invoiceId: string) => {
+    if (sendingInvoiceId || markingPaidInvoiceId) return;
     setMessage('')
-    const response = await fetch('/api/invoices/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId }),
-    })
-    const result = await response.json().catch(() => null)
-    if (!response.ok) {
-      setMessage(result?.error || 'Failed to send invoice')
-      return
+    setSendingInvoiceId(invoiceId)
+
+    try {
+          const response = await fetch("/api/invoices/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ invoiceId }),
+          });
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok) {
+              setMessage(result?.error || "Failed to send invoice");
+              return;
+            }
+            setMessage("Invoice sent to table");
+            await fetchData();
+    } finally {
+      setSendingInvoiceId(null);
     }
-    setMessage('Invoice sent to table')
-    fetchData()
+
+
   }
 
   const unpaidInvoiceGroups = groupInvoicesByTable(unpaidInvoices)
@@ -245,17 +266,26 @@ function BillingContent() {
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">Unpaid Invoices</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">
+          Unpaid Invoices
+        </h2>
         {unpaidInvoiceGroups.length > 0 ? (
           <div className="space-y-3">
             {unpaidInvoiceGroups.map((group) => (
               <BillingTableGroup
                 key={group.tableId}
                 group={group}
-                onView={(invoice) => { setSelectedInvoice(invoice); setShowDetail(true) }}
+                onView={(invoice) => {
+                  setSelectedInvoice(invoice);
+                  setShowDetail(true);
+                }}
                 onMarkPaid={handleMarkPaid}
                 onSendToTable={handleSendToTable}
                 currency={restaurant?.currency}
+                isSending={(invoiceId) => sendingInvoiceId === invoiceId}
+                isMarkingPaid={(invoiceId) =>
+                  markingPaidInvoiceId === invoiceId
+                }
               />
             ))}
             <div className="flex items-center justify-between gap-3">
@@ -268,7 +298,9 @@ function BillingContent() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-500">Page {unpaidPage + 1}</span>
+              <span className="text-sm text-gray-500">
+                Page {unpaidPage + 1}
+              </span>
               <Button
                 type="button"
                 variant="outline"
@@ -286,16 +318,25 @@ function BillingContent() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">Paid / Completed Invoices</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">
+          Paid / Completed Invoices
+        </h2>
         {paidInvoiceGroups.length > 0 ? (
           <div className="space-y-3">
             {paidInvoiceGroups.map((group) => (
               <BillingTableGroup
                 key={group.tableId}
                 group={group}
-                onView={(invoice) => { setSelectedInvoice(invoice); setShowDetail(true) }}
+                onView={(invoice) => {
+                  setSelectedInvoice(invoice);
+                  setShowDetail(true);
+                }}
                 onSendToTable={handleSendToTable}
                 currency={restaurant?.currency}
+                isSending={(invoiceId) => sendingInvoiceId === invoiceId}
+                isMarkingPaid={(invoiceId) =>
+                  markingPaidInvoiceId === invoiceId
+                }
               />
             ))}
             <div className="flex items-center justify-between gap-3">
@@ -321,7 +362,10 @@ function BillingContent() {
             </div>
           </div>
         ) : (
-          <EmptyState title="No paid invoices" description="Paid invoices will appear here." />
+          <EmptyState
+            title="No paid invoices"
+            description="Paid invoices will appear here."
+          />
         )}
       </div>
 
@@ -329,12 +373,22 @@ function BillingContent() {
         invoice={selectedInvoice}
         isOpen={showDetail}
         onClose={() => setShowDetail(false)}
-        onMarkPaid={selectedInvoice?.payment_status === 'unpaid' ? () => handleMarkPaid(selectedInvoice.id) : undefined}
-        onSendToTable={selectedInvoice ? () => handleSendToTable(selectedInvoice.id) : undefined}
+        onMarkPaid={
+          selectedInvoice?.payment_status === "unpaid"
+            ? () => handleMarkPaid(selectedInvoice.id)
+            : undefined
+        }
+        onSendToTable={
+          selectedInvoice
+            ? () => handleSendToTable(selectedInvoice.id)
+            : undefined
+        }
         currency={restaurant?.currency}
+        sendingInvoiceId={sendingInvoiceId}
+        markingPaidInvoiceId={markingPaidInvoiceId} 
       />
     </div>
-  )
+  );
 }
 
 export default function BillingPage() {
