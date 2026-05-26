@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { validateEmail, validatePassword } from '@/utils/validation'
 
 export function LoginForm() {
   const [email, setEmail] = useState('')
@@ -16,16 +17,37 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const cleanEmail = validateEmail(email)
+    if (!cleanEmail) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    const cleanPassword = validatePassword(password)
+    if (!cleanPassword) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+
+    setLoading(true)
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPassword,
     })
 
-    if (error) {
-      setError(error.message)
+    if (authError) {
+      console.error('[LoginForm] auth error:', authError.message)
+      const msg = authError.message.toLowerCase()
+      if (msg.includes('invalid login credentials')) {
+        setError('Incorrect email or password.')
+      } else if (msg.includes('email not confirmed')) {
+        setError('Please confirm your email before signing in.')
+      } else {
+        setError('Sign in failed. Please try again.')
+      }
       setLoading(false)
       return
     }

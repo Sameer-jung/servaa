@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
-import { isUuid, readTrimmedString, validateOrderItems } from '@/utils/validation'
+import { isUuid, readTrimmedString, validateOrderItems, validatePrice } from '@/utils/validation'
 import { writeAuditLog } from '@/utils/audit'
 
 export async function POST(request: Request) {
@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     const { data: table, error: tableError } = await tableQuery.maybeSingle()
 
     if (tableError) {
-      return NextResponse.json({ error: tableError.message }, { status: 500 })
+      console.error('[orders.POST] table lookup error:', tableError.message)
+      return NextResponse.json({ error: 'Could not validate table.' }, { status: 500 })
     }
 
     if (!table) {
@@ -60,20 +61,27 @@ export async function POST(request: Request) {
       .in('id', menuItemIds)
 
     if (menuError) {
-      return NextResponse.json({ error: menuError.message }, { status: 500 })
+      console.error('[orders.POST] menu lookup error:', menuError.message)
+      return NextResponse.json({ error: 'Could not validate menu items.' }, { status: 500 })
     }
 
     const menuItemsById = new Map((menuItems || []).map((item) => [item.id, item]))
     const allItemsAvailable = items.every((item) => menuItemsById.get(item.menuItemId)?.available)
+    const hasValidPrices = (menuItems || []).every((item) => validatePrice(item.price) !== null)
 
     if (!allItemsAvailable || menuItemsById.size !== menuItemIds.length) {
       return NextResponse.json({ error: 'One or more items are unavailable' }, { status: 400 })
     }
 
-    const totalAmount = items.reduce((total, item) => {
+    if (!hasValidPrices) {
+      console.error('[orders.POST] invalid menu item price for restaurant:', restaurantId)
+      return NextResponse.json({ error: 'Could not place order.' }, { status: 500 })
+    }
+
+    const totalAmount = Math.round(items.reduce((total, item) => {
       const menuItem = menuItemsById.get(item.menuItemId)
-      return total + Number(menuItem?.price || 0) * item.quantity
-    }, 0)
+      return total + (validatePrice(menuItem?.price) || 0) * item.quantity
+    }, 0) * 100) / 100
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
@@ -89,14 +97,15 @@ export async function POST(request: Request) {
       .single()
 
     if (orderError || !order) {
-      return NextResponse.json({ error: orderError?.message || 'Could not place order' }, { status: 500 })
+      if (orderError) console.error('[orders.POST] order insert error:', orderError.message)
+      return NextResponse.json({ error: 'Could not place order.' }, { status: 500 })
     }
 
     const orderItems = items.map((item) => ({
       order_id: order.id,
       menu_item_id: item.menuItemId,
       quantity: item.quantity,
-      price_snapshot: Number(menuItemsById.get(item.menuItemId)?.price || 0),
+      price_snapshot: validatePrice(menuItemsById.get(item.menuItemId)?.price) || 0,
       notes: item.notes,
     }))
 
@@ -106,8 +115,9 @@ export async function POST(request: Request) {
       .select('*, menu_item:menu_items(*)')
 
     if (itemsError) {
+      console.error('[orders.POST] order items insert error:', itemsError.message)
       await supabaseAdmin.from('orders').delete().eq('id', order.id)
-      return NextResponse.json({ error: itemsError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Could not place order.' }, { status: 500 })
     }
 
     void writeAuditLog(supabaseAdmin, {
@@ -130,7 +140,8 @@ export async function POST(request: Request) {
         items: insertedItems || [],
       },
     })
-  } catch {
+  } catch (error) {
+    console.error('[orders.POST] error:', error)
     return NextResponse.json({ error: 'Failed to place order' }, { status: 500 })
   }
 }

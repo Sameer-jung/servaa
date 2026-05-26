@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { generateSlug } from '@/utils/format'
 import { writeAuditLog } from '@/utils/audit'
+import { validateEmail, validatePassword, validateRestaurantName } from '@/utils/validation'
 
 export function RegisterForm() {
   const [restaurantName, setRestaurantName] = useState('')
@@ -15,62 +16,77 @@ export function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [debugInfo, setDebugInfo] = useState('')
+  const [successEmail, setSuccessEmail] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
-    setDebugInfo('')
+
+    const cleanName = validateRestaurantName(restaurantName)
+    if (!cleanName) {
+      setError('Restaurant name must be between 2 and 100 characters.')
+      return
+    }
+
+    const cleanEmail = validateEmail(email)
+    if (!cleanEmail) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    const cleanPassword = validatePassword(password)
+    if (!cleanPassword) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setLoading(false)
+      setError('Passwords do not match.')
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
-      setLoading(false)
-      return
-    }
+    setLoading(true)
 
-    setDebugInfo('Creating account...')
-
-    // Try sign up
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
+      email: cleanEmail,
+      password: cleanPassword,
       options: {
-        data: { full_name: restaurantName },
-        emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined,
+        data: { full_name: cleanName },
+        emailRedirectTo: typeof window !== 'undefined'
+          ? `${window.location.origin}/dashboard`
+          : undefined,
       },
     })
 
-    console.log('Auth response:', authData, authError)
-
     if (authError) {
-      setError(`Auth error: ${authError.message}`)
+      console.error('[RegisterForm] auth error:', authError.message)
+      const msg = authError.message.toLowerCase()
+      if (msg.includes('already registered')) {
+        setError('An account with this email already exists.')
+      } else if (msg.includes('email rate limit exceeded')) {
+        setError('Too many sign-up attempts. Please wait a few minutes and try again.')
+      } else if (msg.includes('password')) {
+        setError('Password must be at least 8 characters.')
+      } else {
+        setError('Registration failed. Please try again.')
+      }
       setLoading(false)
       return
     }
 
-    // If signUp succeeded but no user returned, try signing in immediately
-    // This works if email confirmation is OFF
     let user = authData?.user
 
     if (!user) {
-      setDebugInfo('Signing in...')
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: cleanEmail,
+        password: cleanPassword,
       })
 
       if (signInError) {
-        setError(`Check your email (${email}) for confirmation link, then log in.`)
-        setDebugInfo('Email confirmation required.')
+        // Email confirmation is required — show success state, not an error
+        setSuccessEmail(cleanEmail)
         setLoading(false)
         return
       }
@@ -79,31 +95,24 @@ export function RegisterForm() {
     }
 
     if (!user) {
-      setError('Could not authenticate. Try logging in.')
+      setError('Could not authenticate. Please try signing in.')
       setLoading(false)
       return
     }
 
-    setDebugInfo('Creating restaurant...')
-
-    const slug = generateSlug(restaurantName)
+    const slug = generateSlug(cleanName)
     const { data: newRestaurant, error: restaurantError } = await supabase
       .from('restaurants')
-      .insert({
-        name: restaurantName,
-        slug,
-        owner_id: user.id,
-      })
+      .insert({ name: cleanName, slug, owner_id: user.id })
       .select()
       .single()
 
     if (restaurantError) {
-      setError(`Restaurant error: ${restaurantError.message}`)
+      console.error('[RegisterForm] restaurant insert error:', restaurantError.message)
+      setError('Could not create your restaurant. Please try again.')
       setLoading(false)
       return
     }
-
-    setDebugInfo('Adding permissions...')
 
     const { error: staffError } = await supabase.from('staff_members').insert({
       restaurant_id: newRestaurant.id,
@@ -122,61 +131,79 @@ export function RegisterForm() {
       })
     }
 
-    setDebugInfo('Done! Redirecting...')
     setLoading(false)
 
-    setTimeout(() => {
-      router.push('/dashboard')
-      router.refresh()
-    }, 500)
+    // Wait for Supabase to fully commit restaurant and staff_members rows
+    // before the dashboard server component runs its queries.
+    // 1500ms prevents the race condition that shows the restaurant setup form
+    // to users who just registered successfully.
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    router.push('/dashboard')
+    router.refresh()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-          {error}
+    <>
+      {successEmail ? (
+        <div className="rounded-xl bg-green-50 border border-green-200 p-6 text-center space-y-3">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+            <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h3 className="text-base font-semibold text-green-900">Check your inbox</h3>
+          <p className="text-sm text-green-700">
+            We sent a confirmation link to
+          </p>
+          <p className="text-sm font-medium text-green-900 break-all">{successEmail}</p>
+          <p className="text-sm text-green-700">
+            Click the link in that email to activate your account, then come back and sign in.
+          </p>
         </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+          <Input
+            label="Restaurant Name"
+            value={restaurantName}
+            onChange={(e) => setRestaurantName(e.target.value)}
+            placeholder="My Restaurant"
+            required
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@restaurant.com"
+            required
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+          <Input
+            label="Confirm Password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+          <Button type="submit" isLoading={loading} className="w-full">
+            Create Account
+          </Button>
+        </form>
       )}
-      {debugInfo && !error && (
-        <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-600 font-mono text-xs">
-          {debugInfo}
-        </div>
-      )}
-      <Input
-        label="Restaurant Name"
-        value={restaurantName}
-        onChange={(e) => setRestaurantName(e.target.value)}
-        placeholder="My Restaurant"
-        required
-      />
-      <Input
-        label="Email"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@restaurant.com"
-        required
-      />
-      <Input
-        label="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="********"
-        required
-      />
-      <Input
-        label="Confirm Password"
-        type="password"
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-        placeholder="********"
-        required
-      />
-      <Button type="submit" isLoading={loading} className="w-full">
-        Create Account
-      </Button>
-    </form>
+    </>
   )
 }
