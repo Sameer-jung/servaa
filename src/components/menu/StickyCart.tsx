@@ -4,9 +4,8 @@ import { useState } from 'react'
 import { useCartStore } from '@/hooks/useCartStore'
 import { formatCurrency } from '@/utils/format'
 import { Button } from '@/components/ui/Button'
-import { createClient } from '@/lib/supabase/client'
 import { Order } from '@/types'
-import { writeAuditLog } from '@/utils/audit'
+import { isUuid } from '@/utils/validation'
 
 interface StickyCartProps {
   restaurantId: string
@@ -21,12 +20,17 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
   const [placed, setPlaced] = useState(false)
   const [error, setError] = useState('')
   const cart = useCartStore()
-  const supabase = createClient()
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) return
 
     setError('')
+
+    if (!isUuid(restaurantId) || !isUuid(tableId) || cart.items.some((item) => !isUuid(item.menuItem.id))) {
+      setError('Could not place order. Please refresh the page and try again.')
+      return
+    }
+
     setPlacing(true)
 
     const clientRequestId =
@@ -59,67 +63,18 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
         setPlaced(true)
         return
       }
-    } catch {
-      // Fall through to the legacy direct Supabase path while the API migrates.
-    }
 
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        restaurant_id: restaurantId,
-        table_id: tableId,
-        status: 'pending',
-        total_amount: cart.totalPrice,
-        client_request_id: clientRequestId,
-      })
-      .select()
-      .single()
-
-    if (orderError || !order) {
-      setError(orderError?.message || 'Could not place order. Please try again.')
+      setError(
+        result?.error === 'One or more items are unavailable'
+          ? result.error
+          : 'Could not place order. Please try again.'
+      )
+    } catch (orderError) {
+      console.error('[StickyCart] order request error:', orderError)
+      setError('Could not place order. Please try again.')
+    } finally {
       setPlacing(false)
-      return
     }
-
-    const orderItems = cart.items.map((item) => ({
-      order_id: order.id,
-      menu_item_id: item.menuItem.id,
-      quantity: item.quantity,
-      price_snapshot: item.menuItem.price,
-      notes: item.notes || null,
-    }))
-
-    const { data: insertedItems, error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems)
-      .select('*, menu_item:menu_items(*)')
-
-    if (itemsError) {
-      setError(itemsError.message)
-      setPlacing(false)
-      return
-    }
-
-    onOrderPlaced?.({
-      ...(order as Order),
-      total_amount: cart.totalPrice,
-      items: insertedItems || [],
-    })
-    void writeAuditLog(supabase, {
-      restaurantId,
-      actorUserId: null,
-      action: 'order.created',
-      entityType: 'order',
-      entityId: order.id,
-      metadata: {
-        table_id: tableId,
-        item_count: insertedItems?.length || 0,
-        total_amount: cart.totalPrice,
-      },
-    })
-    cart.clearCart()
-    setPlacing(false)
-    setPlaced(true)
   }
 
   if (placed && cart.totalItems === 0) {

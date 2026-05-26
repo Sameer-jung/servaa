@@ -13,6 +13,19 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { MenuCategory, MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
 import { writeAuditLog } from '@/utils/audit'
+import { isUuid, readTrimmedString, validatePrice } from '@/utils/validation'
+
+function readOptionalUrl(value: unknown) {
+  const trimmed = readTrimmedString(value, 2048)
+  if (!trimmed) return null
+
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? trimmed : null
+  } catch {
+    return null
+  }
+}
 
 function MenuContent() {
   const [categories, setCategories] = useState<MenuCategory[]>([])
@@ -23,6 +36,7 @@ function MenuContent() {
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [error, setError] = useState('')
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -51,17 +65,35 @@ function MenuContent() {
 
   const handleSaveCategory = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setError('')
+    if (!restaurant) return
+
     const form = e.currentTarget
-    const name = (form.elements.namedItem('name') as HTMLInputElement).value
+    const name = readTrimmedString((form.elements.namedItem('name') as HTMLInputElement).value, 100)
+
+    if (!name) {
+      setError('Category name is required.')
+      return
+    }
 
     if (editingCategory) {
-      await supabase.from('menu_categories').update({ name }).eq('id', editingCategory.id)
+      const { error: categoryError } = await supabase.from('menu_categories').update({ name }).eq('id', editingCategory.id)
+      if (categoryError) {
+        console.error('[MenuPage] category update error:', categoryError.message)
+        setError('Could not save category.')
+        return
+      }
     } else {
-      await supabase.from('menu_categories').insert({
-        restaurant_id: restaurant!.id,
+      const { error: categoryError } = await supabase.from('menu_categories').insert({
+        restaurant_id: restaurant.id,
         name,
         sort_order: categories.length,
       })
+      if (categoryError) {
+        console.error('[MenuPage] category insert error:', categoryError.message)
+        setError('Could not save category.')
+        return
+      }
     }
 
     setShowCategoryModal(false)
@@ -71,49 +103,96 @@ function MenuContent() {
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('Delete this category? Items will become uncategorized.')) return
-    await supabase.from('menu_categories').delete().eq('id', id)
+    setError('')
+    const { error: categoryError } = await supabase.from('menu_categories').delete().eq('id', id)
+    if (categoryError) {
+      console.error('[MenuPage] category delete error:', categoryError.message)
+      setError('Could not delete category.')
+      return
+    }
     fetchData()
   }
 
   const handleSaveItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setError('')
+    if (!restaurant) return
+
     const form = e.currentTarget
+    const name = readTrimmedString((form.elements.namedItem('name') as HTMLInputElement).value, 100)
+    const description = readTrimmedString((form.elements.namedItem('description') as HTMLInputElement).value, 500)
+    const rawImageUrl = (form.elements.namedItem('image_url') as HTMLInputElement).value
+    const imageUrl = rawImageUrl.trim() ? readOptionalUrl(rawImageUrl) : null
+    const price = validatePrice((form.elements.namedItem('price') as HTMLInputElement).value)
+    const categoryIdValue = (form.elements.namedItem('category_id') as HTMLSelectElement).value
+    const categoryId = categoryIdValue && isUuid(categoryIdValue) && categories.some((category) => category.id === categoryIdValue)
+      ? categoryIdValue
+      : null
+
+    if (!name) {
+      setError('Item name is required.')
+      return
+    }
+
+    if (rawImageUrl.trim() && !imageUrl) {
+      setError('Image URL must start with http:// or https://.')
+      return
+    }
+
+    if (price === null) {
+      setError('Price must be a valid amount.')
+      return
+    }
+
+    if (categoryIdValue && !categoryId) {
+      setError('Please choose a valid category.')
+      return
+    }
+
     const data = {
-      name: (form.elements.namedItem('name') as HTMLInputElement).value,
-      description: (form.elements.namedItem('description') as HTMLInputElement).value,
-      image_url: (form.elements.namedItem('image_url') as HTMLInputElement).value.trim() || null,
-      price: parseFloat((form.elements.namedItem('price') as HTMLInputElement).value),
-      category_id: (form.elements.namedItem('category_id') as HTMLSelectElement).value || null,
+      name,
+      description,
+      image_url: imageUrl,
+      price,
+      category_id: categoryId,
       available: (form.elements.namedItem('available') as HTMLInputElement).checked,
     }
 
     if (editingItem) {
       const { error } = await supabase.from('menu_items').update(data).eq('id', editingItem.id)
-      if (!error) {
-        void writeAuditLog(supabase, {
-          restaurantId: restaurant!.id,
-          action: 'menu_item.updated',
-          entityType: 'menu_item',
-          entityId: editingItem.id,
-          metadata: { name: data.name },
-        })
+      if (error) {
+        console.error('[MenuPage] menu item update error:', error.message)
+        setError('Could not save menu item.')
+        return
       }
+
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'menu_item.updated',
+        entityType: 'menu_item',
+        entityId: editingItem.id,
+        metadata: { name: data.name },
+      })
     } else {
       const { data: newItem, error } = await supabase.from('menu_items').insert({
         ...data,
-        restaurant_id: restaurant!.id,
+        restaurant_id: restaurant.id,
         sort_order: items.length,
       }).select('id').maybeSingle()
 
-      if (!error && newItem) {
-        void writeAuditLog(supabase, {
-          restaurantId: restaurant!.id,
-          action: 'menu_item.created',
-          entityType: 'menu_item',
-          entityId: newItem.id,
-          metadata: { name: data.name },
-        })
+      if (error || !newItem) {
+        if (error) console.error('[MenuPage] menu item insert error:', error.message)
+        setError('Could not save menu item.')
+        return
       }
+
+      void writeAuditLog(supabase, {
+        restaurantId: restaurant.id,
+        action: 'menu_item.created',
+        entityType: 'menu_item',
+        entityId: newItem.id,
+        metadata: { name: data.name },
+      })
     }
 
     setShowItemModal(false)
@@ -123,8 +202,15 @@ function MenuContent() {
 
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Delete this item?')) return
+    setError('')
     const { error } = await supabase.from('menu_items').delete().eq('id', id)
-    if (!error && restaurant) {
+    if (error) {
+      console.error('[MenuPage] menu item delete error:', error.message)
+      setError('Could not delete menu item.')
+      return
+    }
+
+    if (restaurant) {
       void writeAuditLog(supabase, {
         restaurantId: restaurant.id,
         action: 'menu_item.deleted',
@@ -136,7 +222,13 @@ function MenuContent() {
   }
 
   const handleToggleAvailability = async (item: MenuItem) => {
-    await supabase.from('menu_items').update({ available: !item.available }).eq('id', item.id)
+    setError('')
+    const { error: availabilityError } = await supabase.from('menu_items').update({ available: !item.available }).eq('id', item.id)
+    if (availabilityError) {
+      console.error('[MenuPage] menu item availability error:', availabilityError.message)
+      setError('Could not update menu item.')
+      return
+    }
     fetchData()
   }
 
@@ -164,6 +256,12 @@ function MenuContent() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Categories */}
       <div className="flex flex-wrap gap-2">

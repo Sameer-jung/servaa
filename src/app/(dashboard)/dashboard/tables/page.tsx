@@ -10,16 +10,19 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoading } from '@/components/dashboard/PageLoading'
 import { QRCodeDisplay } from '@/components/tables/QRCodeDisplay'
 import { Table } from '@/types'
+import { validateSlug, validateTableNumber } from '@/utils/validation'
 
 function getTableErrorMessage(error: { code?: string; message?: string } | null) {
   if (!error) return ''
 
   const message = error.message || ''
+  console.error('[TablesPage] table save error:', message)
+
   if (error.code === '23505' || message.includes('tables_restaurant_id_table_number_key')) {
     return 'Table number already exists for this restaurant.'
   }
 
-  return message || 'Failed to save table.'
+  return 'Failed to save table.'
 }
 
 function TablesContent() {
@@ -55,12 +58,19 @@ function TablesContent() {
   const handleAddTable = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
+    if (!restaurant) return
+
     const form = e.currentTarget
-    const tableNumber = (form.elements.namedItem('table_number') as HTMLInputElement).value
+    const tableNumber = validateTableNumber((form.elements.namedItem('table_number') as HTMLInputElement).value)
+
+    if (!tableNumber) {
+      setError('Table number must be 1 to 32 letters, numbers, spaces, periods, dashes, or underscores.')
+      return
+    }
 
     const { data: newTable, error: tableError } = await supabase
       .from('tables')
-      .insert({ restaurant_id: restaurant!.id, table_number: tableNumber })
+      .insert({ restaurant_id: restaurant.id, table_number: tableNumber })
       .select()
       .single()
 
@@ -79,6 +89,13 @@ function TablesContent() {
 
   const generateQRForTable = async (table: Table) => {
     setError('')
+    const restaurantSlug = validateSlug(restaurant?.slug)
+    const tableNumber = validateTableNumber(table.table_number)
+    if (!restaurantSlug || !tableNumber) {
+      setError('Failed to generate QR code')
+      return
+    }
+
     setGeneratingQR(table.id)
     try {
       const response = await fetch('/api/qr', {
@@ -86,18 +103,20 @@ function TablesContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableId: table.id,
-          restaurantSlug: restaurant!.slug,
-          tableNumber: table.table_number,
+          restaurantSlug,
+          tableNumber,
         }),
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) {
-        setError(result?.error || 'Failed to generate QR code')
+        console.error('[TablesPage] QR generation error:', result?.error || response.statusText)
+        setError('Failed to generate QR code')
         return
       }
       fetchTables()
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to generate QR code')
+      console.error('[TablesPage] QR generation request error:', error)
+      setError('Failed to generate QR code')
     } finally {
       setGeneratingQR(null)
     }
@@ -105,7 +124,13 @@ function TablesContent() {
 
   const handleDeleteTable = async (id: string) => {
     if (!confirm('Delete this table?')) return
-    await supabase.from('tables').delete().eq('id', id)
+    setError('')
+    const { error: tableError } = await supabase.from('tables').delete().eq('id', id)
+    if (tableError) {
+      console.error('[TablesPage] table delete error:', tableError.message)
+      setError('Failed to delete table.')
+      return
+    }
     fetchTables()
   }
 

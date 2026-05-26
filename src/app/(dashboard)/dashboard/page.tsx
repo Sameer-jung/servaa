@@ -59,9 +59,18 @@ export default async function DashboardPage() {
               const name = formData.get('name') as string
               const slug = generateSlug(name)
 
+              // const { data: restaurant } = await supabase
+              //   .from('restaurants')
+              //   .insert({ name, slug, owner_id: user.id })
+
+              const address = formData.get('address') as string
+              const phone = formData.get('phone') as string
+              const tax_rate = parseFloat(formData.get('tax_rate') as string) || 0
+              const currency = formData.get('currency') as string || 'NPR'
+
               const { data: restaurant } = await supabase
                 .from('restaurants')
-                .insert({ name, slug, owner_id: user.id })
+                .insert({ name, slug, owner_id: user.id, address, phone, tax_rate, currency })
                 .select()
                 .single()
 
@@ -82,6 +91,7 @@ export default async function DashboardPage() {
                     metadata: { role: 'owner' },
                   })
                 }
+                redirect('/dashboard')
               }
             }}
             className="mt-6 space-y-4 text-left"
@@ -92,10 +102,32 @@ export default async function DashboardPage() {
                 name="name"
                 type="text"
                 required
+                defaultValue={user.user_metadata?.full_name || ''}
                 placeholder="My Restaurant"
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Address</label>
+              <input name="address" type="text" placeholder="Pokhara , XXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone</label>
+              <input name="phone" type="text" placeholder="+977 98XXXXXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Tax Rate (%)</label>
+              <input name="tax_rate" type="number" placeholder="13" min="0" max="100" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Currency</label>
+              <select name="currency" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                <option value="NPR">NPR</option>
+                <option value="USD">USD</option>
+                <option value="INR">INR</option>
+              </select>
+          </div>
             <button
               type="submit"
               className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"

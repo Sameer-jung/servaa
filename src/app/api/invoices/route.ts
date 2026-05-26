@@ -4,6 +4,16 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { hasBillableItems } from '@/utils/orders'
 import { writeAuditLog } from '@/utils/audit'
 import { hasRestaurantAccess } from '@/utils/roles'
+import { clampInteger, isUuid, validatePrice } from '@/utils/validation'
+
+const paymentStatuses = ['unpaid', 'paid', 'refunded'] as const
+type PaymentStatus = (typeof paymentStatuses)[number]
+
+function validatePaymentStatus(value: unknown): PaymentStatus | null {
+  return typeof value === 'string' && paymentStatuses.includes(value as PaymentStatus)
+    ? value as PaymentStatus
+    : null
+}
 
 async function generateInvoiceNumber(restaurantId: string) {
   const now = new Date()
@@ -33,6 +43,7 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string, acto
     .maybeSingle()
 
   if (orderError || !order) {
+    if (orderError) console.error('[invoices] order lookup error:', orderError.message)
     return { invoice: null, error: 'Order not found', status: 404 }
   }
 
@@ -47,23 +58,34 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string, acto
     .maybeSingle()
 
   if (existingInvoiceError) {
-    return { invoice: null, error: existingInvoiceError.message, status: 500 }
+    console.error('[invoices] existing invoice lookup error:', existingInvoiceError.message)
+    return { invoice: null, error: 'Could not load invoice.', status: 500 }
   }
 
   if (existingInvoice) {
     return { invoice: existingInvoice, error: null, status: 200 }
   }
 
-  const { data: restaurant } = await supabaseAdmin
+  const { data: restaurant, error: restaurantError } = await supabaseAdmin
     .from('restaurants')
     .select('tax_rate')
     .eq('id', restaurantId)
     .maybeSingle()
 
-  const taxRate = restaurant?.tax_rate || 0
-  const subtotal = Number(order.total_amount || 0)
-  const taxAmount = subtotal * (taxRate / 100)
-  const grandTotal = subtotal + taxAmount
+  if (restaurantError) {
+    console.error('[invoices] restaurant lookup error:', restaurantError.message)
+    return { invoice: null, error: 'Could not create invoice.', status: 500 }
+  }
+
+  const taxRate = Math.min(100, validatePrice(restaurant?.tax_rate) || 0)
+  const subtotal = validatePrice(order.total_amount)
+  if (subtotal === null) {
+    console.error('[invoices] invalid order total for order:', orderId)
+    return { invoice: null, error: 'Could not calculate invoice.', status: 500 }
+  }
+
+  const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100
+  const grandTotal = Math.round((subtotal + taxAmount) * 100) / 100
 
   const { data: invoice, error: invoiceError } = await supabaseAdmin
     .from('invoices')
@@ -80,7 +102,8 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string, acto
     .single()
 
   if (invoiceError) {
-    return { invoice: null, error: invoiceError.message, status: 500 }
+    console.error('[invoices] invoice insert error:', invoiceError.message)
+    return { invoice: null, error: 'Could not create invoice.', status: 500 }
   }
 
   void writeAuditLog(supabaseAdmin, {
@@ -100,7 +123,10 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string, acto
 }
 
 async function reconcileCompletedOrders(restaurantId: string) {
-  const [{ data: completedOrders }, { data: existingInvoices }] = await Promise.all([
+  const [
+    { data: completedOrders, error: completedOrdersError },
+    { data: existingInvoices, error: existingInvoicesError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('orders')
       .select('id, items:order_items(id)')
@@ -113,6 +139,14 @@ async function reconcileCompletedOrders(restaurantId: string) {
       .select('order_id')
       .eq('restaurant_id', restaurantId),
   ])
+
+  if (completedOrdersError || existingInvoicesError) {
+    console.error(
+      '[invoices] reconcile query error:',
+      completedOrdersError?.message || existingInvoicesError?.message
+    )
+    throw new Error('Could not reconcile invoices')
+  }
 
   const invoicedOrderIds = new Set((existingInvoices || []).map((invoice) => invoice.order_id))
   const missingInvoiceOrders = (completedOrders || []).filter((order) => {
@@ -136,13 +170,19 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const restaurantId = searchParams.get('restaurantId')
     const paymentStatus = searchParams.get('paymentStatus')
-    const page = Math.max(0, Number(searchParams.get('page') || 0))
-    const pageSize = Math.min(50, Math.max(1, Number(searchParams.get('pageSize') || 20)))
+    const page = clampInteger(searchParams.get('page') || 0, 0, 10000)
+    const pageSize = clampInteger(searchParams.get('pageSize') || 20, 1, 50)
+
+    if (!isUuid(restaurantId) || page === null || pageSize === null) {
+      return NextResponse.json({ error: 'Invalid invoice query' }, { status: 400 })
+    }
+
     const from = page * pageSize
     const to = from + pageSize - 1
 
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'Missing restaurantId' }, { status: 400 })
+    const cleanPaymentStatus = paymentStatus ? validatePaymentStatus(paymentStatus) : null
+    if (paymentStatus && !cleanPaymentStatus) {
+      return NextResponse.json({ error: 'Invalid payment status' }, { status: 400 })
     }
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -163,20 +203,21 @@ export async function GET(request: Request) {
       .eq('restaurant_id', restaurantId)
       .order('created_at', { ascending: false })
 
-    if (paymentStatus) {
-      query = query.eq('payment_status', paymentStatus)
+    if (cleanPaymentStatus) {
+      query = query.eq('payment_status', cleanPaymentStatus)
     }
 
     const { data: invoices, error } = await query.range(from, to)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('[invoices.GET] invoice query error:', error.message)
+      return NextResponse.json({ error: 'Could not load invoices.' }, { status: 500 })
     }
 
     return NextResponse.json({ invoices: invoices || [] })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load invoices'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[invoices.GET] error:', error)
+    return NextResponse.json({ error: 'Failed to load invoices' }, { status: 500 })
   }
 }
 
@@ -184,8 +225,8 @@ export async function POST(request: Request) {
   try {
     const { orderId, restaurantId } = await request.json()
 
-    if (!orderId || !restaurantId) {
-      return NextResponse.json({ error: 'Missing orderId or restaurantId' }, { status: 400 })
+    if (!isUuid(orderId) || !isUuid(restaurantId)) {
+      return NextResponse.json({ error: 'Invalid invoice payload' }, { status: 400 })
     }
 
     const supabase = await createClient()
@@ -205,7 +246,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ invoice: result.invoice })
-  } catch {
+  } catch (error) {
+    console.error('[invoices.POST] error:', error)
     return NextResponse.json(
       { error: 'Failed to generate invoice' },
       { status: 500 }
@@ -217,8 +259,10 @@ export async function PATCH(request: Request) {
   try {
     const { invoiceId, payment_status } = await request.json()
 
-    if (!invoiceId || !payment_status) {
-      return NextResponse.json({ error: 'Missing invoiceId or payment_status' }, { status: 400 })
+    const cleanPaymentStatus = validatePaymentStatus(payment_status)
+
+    if (!isUuid(invoiceId) || !cleanPaymentStatus) {
+      return NextResponse.json({ error: 'Invalid invoice update' }, { status: 400 })
     }
 
     const supabase = await createClient()
@@ -234,7 +278,8 @@ export async function PATCH(request: Request) {
       .maybeSingle()
 
     if (invoiceError) {
-      return NextResponse.json({ error: invoiceError.message }, { status: 500 })
+      console.error('[invoices.PATCH] invoice lookup error:', invoiceError.message)
+      return NextResponse.json({ error: 'Could not load invoice.' }, { status: 500 })
     }
 
     if (!invoice) {
@@ -247,8 +292,8 @@ export async function PATCH(request: Request) {
     }
 
     const updates = {
-      payment_status,
-      paid_at: payment_status === 'paid' ? new Date().toISOString() : null,
+      payment_status: cleanPaymentStatus,
+      paid_at: cleanPaymentStatus === 'paid' ? new Date().toISOString() : null,
     }
 
     const { data: updatedInvoice, error: updateError } = await supabaseAdmin
@@ -259,10 +304,11 @@ export async function PATCH(request: Request) {
       .single()
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+      console.error('[invoices.PATCH] invoice update error:', updateError.message)
+      return NextResponse.json({ error: 'Could not update invoice.' }, { status: 500 })
     }
 
-    if (payment_status === 'paid') {
+    if (cleanPaymentStatus === 'paid') {
       void writeAuditLog(supabaseAdmin, {
         restaurantId: invoice.restaurant_id,
         actorUserId: user.id,
@@ -270,13 +316,14 @@ export async function PATCH(request: Request) {
         entityType: 'invoice',
         entityId: invoiceId,
         metadata: {
-          payment_status,
+          payment_status: cleanPaymentStatus,
         },
       })
     }
 
     return NextResponse.json({ invoice: updatedInvoice })
-  } catch {
+  } catch (error) {
+    console.error('[invoices.PATCH] error:', error)
     return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
   }
 }

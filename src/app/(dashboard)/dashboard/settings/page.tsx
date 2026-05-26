@@ -6,6 +6,7 @@ import { useRestaurant } from '@/hooks/useRestaurant'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { readTrimmedString, validatePrice, validateRestaurantName, validateSlug } from '@/utils/validation'
 
 const currencyOptions = ['NPR', 'USD', 'INR', 'EUR', 'GBP', 'AUD', 'CAD']
 
@@ -14,12 +15,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [menuUrl, setMenuUrl] = useState('')
+  const [error, setError] = useState('')
   const supabase = createClient()
 
   useEffect(() => {
-    if (restaurant?.slug) {
+    const slug = validateSlug(restaurant?.slug)
+    if (slug) {
       const base = typeof window !== 'undefined' ? window.location.origin : ''
-      setMenuUrl(`${base}/menu/${restaurant.slug}`)
+      setMenuUrl(`${base}/menu/${slug}`)
     }
   }, [restaurant])
 
@@ -28,16 +31,49 @@ export default function SettingsPage() {
     if (!restaurant) return
 
     setSaving(true)
+    setError('')
+    setSaved(false)
     const form = e.currentTarget
-    const data = {
-      name: (form.elements.namedItem('name') as HTMLInputElement).value,
-      address: (form.elements.namedItem('address') as HTMLInputElement).value,
-      phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
-      tax_rate: parseFloat((form.elements.namedItem('tax_rate') as HTMLInputElement).value) || 0,
-      currency: (form.elements.namedItem('currency') as HTMLSelectElement).value || 'NPR',
+    const name = validateRestaurantName((form.elements.namedItem('name') as HTMLInputElement).value)
+    const rawTaxRate = (form.elements.namedItem('tax_rate') as HTMLInputElement).value || 0
+    const parsedTaxRate = validatePrice(rawTaxRate)
+    const taxRate = parsedTaxRate === null ? null : Math.min(100, parsedTaxRate)
+    const currency = (form.elements.namedItem('currency') as HTMLSelectElement).value
+
+    if (!name) {
+      setError('Restaurant name must be between 2 and 100 characters.')
+      setSaving(false)
+      return
     }
 
-    await supabase.from('restaurants').update(data).eq('id', restaurant.id)
+    if (taxRate === null) {
+      setError('Tax rate must be a valid number.')
+      setSaving(false)
+      return
+    }
+
+    if (!currencyOptions.includes(currency)) {
+      setError('Please choose a valid currency.')
+      setSaving(false)
+      return
+    }
+
+    const data = {
+      name,
+      address: readTrimmedString((form.elements.namedItem('address') as HTMLInputElement).value, 500),
+      phone: readTrimmedString((form.elements.namedItem('phone') as HTMLInputElement).value, 50),
+      tax_rate: taxRate,
+      currency,
+    }
+
+    const { error: updateError } = await supabase.from('restaurants').update(data).eq('id', restaurant.id)
+    if (updateError) {
+      console.error('[SettingsPage] restaurant update error:', updateError.message)
+      setError('Could not save settings.')
+      setSaving(false)
+      return
+    }
+
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -62,6 +98,12 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">Manage your restaurant details</p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Restaurant Name Card */}
       {restaurant && (

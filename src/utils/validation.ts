@@ -49,3 +49,52 @@ export function validateOrderItems(value: unknown): ValidatedOrderItem[] | null 
 
   return items
 }
+
+export function validateEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed.length === 0 || trimmed.length > 254) return null
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return null
+  return trimmed
+}
+
+export function validatePassword(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  if (value.length < 8 || value.length > 72) return null
+  return value
+}
+
+export function validateRestaurantName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed.length < 2 || trimmed.length > 100) return null
+  return trimmed
+}
+
+export function validatePrice(value: unknown): number | null {
+  const parsed = typeof value === 'string' && value.trim()
+    ? Number(value)
+    : typeof value === 'number'
+      ? value
+      : null
+
+  if (parsed === null || !Number.isFinite(parsed)) return null
+  if (parsed < 0 || parsed > 99999999.99) return null
+  return Math.round(parsed * 100) / 100
+}
+
+export function validateTableNumber(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.length > 32) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(trimmed)) return null
+  return trimmed
+}
+
+export function validateSlug(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed.length < 2 || trimmed.length > 100) return null
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmed)) return null
+  return trimmed
+}
