@@ -1,5 +1,7 @@
 'use client'
 
+import toast from "react-hot-toast";
+import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -69,11 +71,11 @@ export default function SettingsPage() {
     const { error: updateError } = await supabase.from('restaurants').update(data).eq('id', restaurant.id)
     if (updateError) {
       console.error('[SettingsPage] restaurant update error:', updateError.message)
-      setError('Could not save settings.')
+      toast.error(MESSAGES.settings.saveFailed)
       setSaving(false)
       return
     }
-
+    toast.success(MESSAGES.settings.saveSuccess);
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)

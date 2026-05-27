@@ -1,5 +1,7 @@
 'use client'
 
+import toast from "react-hot-toast";
+import { MESSAGES } from "@/utils/messages";
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -63,7 +65,7 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
       special_instructions: type === 'water' ? 'REQUEST: Water' : 'REQUEST: Bill',
       customer_session_id: tableToken || null,
     }).select('id').maybeSingle()
-
+  
     if (serviceRequest.data?.id && legacyOrder?.id) {
       await supabase
         .from('service_requests')
@@ -76,6 +78,13 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
     if (!error || serviceRequest.data) {
       setConfirmed(type)
       setTimeout(() => setConfirmed(null), 3000)
+      toast.success(
+        type === "water"
+          ? MESSAGES.serviceRequest.waterSent
+          : MESSAGES.serviceRequest.billSent,
+      );
+    }else {
+      toast.error(MESSAGES.serviceRequest.sendFailed);
     }
   }
 
