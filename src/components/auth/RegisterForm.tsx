@@ -101,6 +101,7 @@ export function RegisterForm() {
     if (!user) {
       setError('Could not authenticate. Please try signing in.')
       setLoading(false)
+      toast.error("Could not authenticate. Please try signing in.");
       return
     }
 
@@ -115,6 +116,7 @@ export function RegisterForm() {
       console.error('[RegisterForm] restaurant insert error:', restaurantError.message)
       setError('Could not create your restaurant. Please try again.')
       setLoading(false)
+      toast.error("Could not create your restaurant. Please try again.");
       return
     }
 
