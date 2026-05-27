@@ -41,6 +41,7 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
       if (!hasOrders) {
         setRequesting(null)
         setShowOrderFirst(true)
+        toast.error("Please place an order before requesting the bill.");
         return
       }
     }
