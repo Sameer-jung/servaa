@@ -28,24 +28,24 @@ export function RegisterForm() {
 
     const cleanName = validateRestaurantName(restaurantName)
     if (!cleanName) {
-      setError('Restaurant name must be between 2 and 100 characters.')
+      toast.error('Restaurant name must be between 2 and 100 characters.')
       return
     }
 
     const cleanEmail = validateEmail(email)
     if (!cleanEmail) {
-      setError('Please enter a valid email address.')
+      toast.error('Please enter a valid email address.')
       return
     }
 
     const cleanPassword = validatePassword(password)
     if (!cleanPassword) {
-      setError('Password must be at least 8 characters.')
+      toast.error('Password must be at least 8 characters.')
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+      toast.error('Passwords do not match.')
       return
     }
 
@@ -67,11 +67,11 @@ export function RegisterForm() {
       console.error('[RegisterForm] auth error:', authError.message)
       const msg = authError.message.toLowerCase()
       if (msg.includes('already registered')) {
-        setError('An account with this email already exists.')
+        toast.error('An account with this email already exists.')
       } else if (msg.includes('email rate limit exceeded')) {
-        setError('Too many sign-up attempts. Please wait a few minutes and try again.')
+        toast.error('Too many sign-up attempts. Please wait a few minutes and try again.')
       } else if (msg.includes('password')) {
-        setError('Password must be at least 8 characters.')
+        toast.error('Password must be at least 8 characters.')
       } else {
         setError('Registration failed. Please try again.')
         toast.error(MESSAGES.common.unexpectedError);
