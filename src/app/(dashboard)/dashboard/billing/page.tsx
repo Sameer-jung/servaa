@@ -151,6 +151,7 @@ function BillingContent() {
 
     if (!unpaidResponse.ok || !paidResponse.ok) {
       setMessage(unpaidResult?.error || paidResult?.error || 'Failed to load invoices')
+      toast.error(MESSAGES.billing.loadFailed)
       setUnpaidInvoices([])
       setPaidInvoices([])
       setLoading(false)

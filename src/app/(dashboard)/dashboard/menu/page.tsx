@@ -2,6 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import toast from "react-hot-toast";
+import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -72,7 +74,7 @@ function MenuContent() {
     const name = readTrimmedString((form.elements.namedItem('name') as HTMLInputElement).value, 100)
 
     if (!name) {
-      setError('Category name is required.')
+      toast.error("Category name is required.");
       return
     }
 
@@ -80,9 +82,10 @@ function MenuContent() {
       const { error: categoryError } = await supabase.from('menu_categories').update({ name }).eq('id', editingCategory.id)
       if (categoryError) {
         console.error('[MenuPage] category update error:', categoryError.message)
-        setError('Could not save category.')
+        toast.error(MESSAGES.menu.saveFailed);
         return
       }
+      toast.success(MESSAGES.menu.categoryUpdateSuccess);
     } else {
       const { error: categoryError } = await supabase.from('menu_categories').insert({
         restaurant_id: restaurant.id,
@@ -91,11 +94,11 @@ function MenuContent() {
       })
       if (categoryError) {
         console.error('[MenuPage] category insert error:', categoryError.message)
-        setError('Could not save category.')
+        toast.error(MESSAGES.menu.saveFailed);
         return
       }
+      toast.success(MESSAGES.menu.categoryCreateSuccess);
     }
-
     setShowCategoryModal(false)
     setEditingCategory(null)
     fetchData()
@@ -107,9 +110,10 @@ function MenuContent() {
     const { error: categoryError } = await supabase.from('menu_categories').delete().eq('id', id)
     if (categoryError) {
       console.error('[MenuPage] category delete error:', categoryError.message)
-      setError('Could not delete category.')
+      toast.error(MESSAGES.menu.saveFailed);
       return
     }
+    toast.success(MESSAGES.menu.categoryDeleteSuccess);
     fetchData()
   }
 
@@ -130,22 +134,22 @@ function MenuContent() {
       : null
 
     if (!name) {
-      setError('Item name is required.')
+      toast.error('Item name is required.')
       return
     }
 
     if (rawImageUrl.trim() && !imageUrl) {
-      setError('Image URL must start with http:// or https://.')
+      toast.error('Image URL must start with http:// or https://.')
       return
     }
 
     if (price === null) {
-      setError('Price must be a valid amount.')
+      toast.error('Price must be a valid amount.')
       return
     }
 
     if (categoryIdValue && !categoryId) {
-      setError('Please choose a valid category.')
+      toast.error('Please choose a valid category.')
       return
     }
 
@@ -162,7 +166,7 @@ function MenuContent() {
       const { error } = await supabase.from('menu_items').update(data).eq('id', editingItem.id)
       if (error) {
         console.error('[MenuPage] menu item update error:', error.message)
-        setError('Could not save menu item.')
+        toast.error(MESSAGES.menu.saveFailed);
         return
       }
 
@@ -173,6 +177,7 @@ function MenuContent() {
         entityId: editingItem.id,
         metadata: { name: data.name },
       })
+      toast.success(MESSAGES.menu.itemUpdateSuccess);
     } else {
       const { data: newItem, error } = await supabase.from('menu_items').insert({
         ...data,
@@ -182,7 +187,7 @@ function MenuContent() {
 
       if (error || !newItem) {
         if (error) console.error('[MenuPage] menu item insert error:', error.message)
-        setError('Could not save menu item.')
+        toast.error(MESSAGES.menu.saveFailed);
         return
       }
 
@@ -193,6 +198,7 @@ function MenuContent() {
         entityId: newItem.id,
         metadata: { name: data.name },
       })
+      toast.success(MESSAGES.menu.itemCreateSuccess);
     }
 
     setShowItemModal(false)
@@ -206,7 +212,7 @@ function MenuContent() {
     const { error } = await supabase.from('menu_items').delete().eq('id', id)
     if (error) {
       console.error('[MenuPage] menu item delete error:', error.message)
-      setError('Could not delete menu item.')
+      toast.error(MESSAGES.menu.saveFailed);
       return
     }
 
@@ -218,6 +224,7 @@ function MenuContent() {
         entityId: id,
       })
     }
+    toast.success(MESSAGES.menu.itemDeleteSuccess);
     fetchData()
   }
 
@@ -226,9 +233,10 @@ function MenuContent() {
     const { error: availabilityError } = await supabase.from('menu_items').update({ available: !item.available }).eq('id', item.id)
     if (availabilityError) {
       console.error('[MenuPage] menu item availability error:', availabilityError.message)
-      setError('Could not update menu item.')
+      toast.error(MESSAGES.menu.saveFailed);
       return
     }
+    toast.success(MESSAGES.menu.availabilityUpdated);
     fetchData()
   }
 
