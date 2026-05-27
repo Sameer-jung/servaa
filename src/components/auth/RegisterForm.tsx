@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import {toast} from "react-hot-toast"
+import {MESSAGES} from "@/utils/messages"
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -58,6 +60,7 @@ export function RegisterForm() {
           ? `${window.location.origin}/dashboard`
           : undefined,
       },
+      
     })
 
     if (authError) {
@@ -71,6 +74,7 @@ export function RegisterForm() {
         setError('Password must be at least 8 characters.')
       } else {
         setError('Registration failed. Please try again.')
+        toast.error(MESSAGES.common.unexpectedError);
       }
       setLoading(false)
       return
@@ -138,7 +142,7 @@ export function RegisterForm() {
     // 1500ms prevents the race condition that shows the restaurant setup form
     // to users who just registered successfully.
     await new Promise(resolve => setTimeout(resolve, 1500))
-
+    toast.success(MESSAGES.auth.registerSuccess);
     router.push('/dashboard')
     router.refresh()
   }
