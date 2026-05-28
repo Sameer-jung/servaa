@@ -1,7 +1,5 @@
 'use client'
 
-import {toast} from "react-hot-toast"
-import {MESSAGES} from "@/utils/messages"
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -263,7 +261,6 @@ function OrdersContent() {
         entityId: orderId,
         metadata: { status: 'accepted' },
       })
-      toast.success(MESSAGES.staffOrder.accepted);
     }
     setUpdatingOrderId(null)
   }
@@ -282,7 +279,6 @@ function OrdersContent() {
         entityId: orderId,
         metadata: { status: 'cancelled' },
       })
-      toast.success(MESSAGES.staffOrder.rejected);
     }
     setUpdatingOrderId(null)
   }
@@ -296,7 +292,6 @@ function OrdersContent() {
     if (error) {
       fetchOrders()
       setUpdatingOrderId(null)
-      toast.error(MESSAGES.staffOrder.updateFailed);
       return
     }
 
@@ -308,8 +303,6 @@ function OrdersContent() {
         entityId: orderId,
         metadata: { status: nextStatus },
       })
-      if (nextStatus === 'preparing') toast.success(MESSAGES.staffOrder.preparing)
-      if (nextStatus === 'ready') toast.success(MESSAGES.staffOrder.ready)
     }
 
     if (nextStatus === 'completed' && restaurant) {
@@ -322,7 +315,6 @@ function OrdersContent() {
       if (!response.ok) {
         fetchOrders()
       }
-      if (nextStatus === 'completed') toast.success(MESSAGES.staffOrder.completed)
     }
     setUpdatingOrderId(null)
   }

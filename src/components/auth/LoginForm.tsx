@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import toast from 'react-hot-toast'
-import { MESSAGES } from "@/utils/messages";
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -23,13 +21,13 @@ export function LoginForm() {
 
     const cleanEmail = validateEmail(email)
     if (!cleanEmail) {
-      toast.error('Please enter a valid email address.')
+      setError('Please enter a valid email address.')
       return
     }
 
     const cleanPassword = validatePassword(password)
     if (!cleanPassword) {
-      toast.error('Password must be at least 8 characters.')
+      setError('Password must be at least 8 characters.')
       return
     }
 
@@ -44,18 +42,17 @@ export function LoginForm() {
       console.error('[LoginForm] auth error:', authError.message)
       const msg = authError.message.toLowerCase()
       if (msg.includes('invalid login credentials')) {
-        toast.error(MESSAGES.auth.invalidCredentials);
+        setError('Incorrect email or password.')
       } else if (msg.includes('email not confirmed')) {
-        toast.error('Please confirm your email before signing in.')
+        setError('Please confirm your email before signing in.')
       } else {
-        toast.error('Sign in failed. Please try again.')
+        setError('Sign in failed. Please try again.')
       }
       setLoading(false)
       return
     }
 
     router.refresh()
-    toast.success(MESSAGES.auth.loginSuccess);
     router.replace('/dashboard')
   }
 

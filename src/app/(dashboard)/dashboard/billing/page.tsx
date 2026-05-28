@@ -1,7 +1,5 @@
 'use client'
 
-import toast from "react-hot-toast";
-import { MESSAGES } from "@/utils/messages"; 
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -151,7 +149,6 @@ function BillingContent() {
 
     if (!unpaidResponse.ok || !paidResponse.ok) {
       setMessage(unpaidResult?.error || paidResult?.error || 'Failed to load invoices')
-      toast.error(MESSAGES.billing.loadFailed)
       setUnpaidInvoices([])
       setPaidInvoices([])
       setLoading(false)
@@ -216,7 +213,6 @@ function BillingContent() {
       })
       await fetchData();
       setShowDetail(false);
-      toast.success(MESSAGES.billing.markPaidSuccess);
   } finally {
     setMarkingPaidInvoiceId(null);
   }
@@ -238,11 +234,9 @@ function BillingContent() {
 
             if (!response.ok) {
               setMessage(result?.error || "Failed to send invoice");
-              toast.error(MESSAGES.billing.sendFailed);
               return;
             }
             setMessage("Invoice sent to table");
-            toast.success(MESSAGES.billing.invoiceSentToTable);
             await fetchData();
     } finally {
       setSendingInvoiceId(null);

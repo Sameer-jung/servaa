@@ -1,6 +1,5 @@
 'use client'
-import {toast} from "react-hot-toast"
-import {MESSAGES} from "@/utils/messages"
+
 import { useState } from 'react'
 import { useCartStore } from '@/hooks/useCartStore'
 import { formatCurrency } from '@/utils/format'
@@ -62,18 +61,17 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
         cart.clearCart()
         setPlacing(false)
         setPlaced(true)
-        toast.success(MESSAGES.customerOrder.sentToKitchen);
         return
       }
-      
-      toast.error(
-        result?.error === "One or more items are unavailable"
-          ? MESSAGES.customerOrder.itemsUnavailable
-          : MESSAGES.customerOrder.placeFailed,
-      );
+
+      setError(
+        result?.error === 'One or more items are unavailable'
+          ? result.error
+          : 'Could not place order. Please try again.'
+      )
     } catch (orderError) {
       console.error('[StickyCart] order request error:', orderError)
-      toast.error(MESSAGES.customerOrder.placeFailed);
+      setError('Could not place order. Please try again.')
     } finally {
       setPlacing(false)
     }
