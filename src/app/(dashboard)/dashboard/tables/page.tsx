@@ -1,5 +1,7 @@
 'use client'
 
+import toast from "react-hot-toast";
+import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -76,11 +78,13 @@ function TablesContent() {
 
     if (tableError) {
       setError(getTableErrorMessage(tableError))
+      toast.error(MESSAGES.tables.addFailed);
       return
     }
 
     if (newTable) {
       await generateQRForTable(newTable)
+      toast.success(MESSAGES.tables.addSuccess);
     }
 
     setShowModal(false)
@@ -128,9 +132,10 @@ function TablesContent() {
     const { error: tableError } = await supabase.from('tables').delete().eq('id', id)
     if (tableError) {
       console.error('[TablesPage] table delete error:', tableError.message)
-      setError('Failed to delete table.')
+      toast.error(MESSAGES.tables.deleteFailed);
       return
     }
+    toast.success(MESSAGES.tables.deleteSuccess);
     fetchTables()
   }
 

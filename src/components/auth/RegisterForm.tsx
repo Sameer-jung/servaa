@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import {toast} from "react-hot-toast"
+import {MESSAGES} from "@/utils/messages"
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -26,24 +28,24 @@ export function RegisterForm() {
 
     const cleanName = validateRestaurantName(restaurantName)
     if (!cleanName) {
-      setError('Restaurant name must be between 2 and 100 characters.')
+      toast.error('Restaurant name must be between 2 and 100 characters.')
       return
     }
 
     const cleanEmail = validateEmail(email)
     if (!cleanEmail) {
-      setError('Please enter a valid email address.')
+      toast.error('Please enter a valid email address.')
       return
     }
 
     const cleanPassword = validatePassword(password)
     if (!cleanPassword) {
-      setError('Password must be at least 8 characters.')
+      toast.error('Password must be at least 8 characters.')
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+      toast.error('Passwords do not match.')
       return
     }
 
@@ -58,19 +60,21 @@ export function RegisterForm() {
           ? `${window.location.origin}/dashboard`
           : undefined,
       },
+      
     })
 
     if (authError) {
       console.error('[RegisterForm] auth error:', authError.message)
       const msg = authError.message.toLowerCase()
       if (msg.includes('already registered')) {
-        setError('An account with this email already exists.')
+        toast.error('An account with this email already exists.')
       } else if (msg.includes('email rate limit exceeded')) {
-        setError('Too many sign-up attempts. Please wait a few minutes and try again.')
+        toast.error('Too many sign-up attempts. Please wait a few minutes and try again.')
       } else if (msg.includes('password')) {
-        setError('Password must be at least 8 characters.')
+        toast.error('Password must be at least 8 characters.')
       } else {
         setError('Registration failed. Please try again.')
+        toast.error(MESSAGES.common.unexpectedError);
       }
       setLoading(false)
       return
@@ -97,6 +101,7 @@ export function RegisterForm() {
     if (!user) {
       setError('Could not authenticate. Please try signing in.')
       setLoading(false)
+      toast.error("Could not authenticate. Please try signing in.");
       return
     }
 
@@ -111,6 +116,7 @@ export function RegisterForm() {
       console.error('[RegisterForm] restaurant insert error:', restaurantError.message)
       setError('Could not create your restaurant. Please try again.')
       setLoading(false)
+      toast.error("Could not create your restaurant. Please try again.");
       return
     }
 
@@ -138,7 +144,7 @@ export function RegisterForm() {
     // 1500ms prevents the race condition that shows the restaurant setup form
     // to users who just registered successfully.
     await new Promise(resolve => setTimeout(resolve, 1500))
-
+    toast.success(MESSAGES.auth.registerSuccess);
     router.push('/dashboard')
     router.refresh()
   }
