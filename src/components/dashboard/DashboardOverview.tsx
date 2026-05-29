@@ -223,8 +223,8 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500">Overview of your restaurant</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Overview of your restaurant</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -235,7 +235,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">Recent Orders</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">Recent Orders</h2>
         {recentTableSummaries.length > 0 ? (
           <div className="space-y-3">
             {recentTableSummaries.map((table) => (
@@ -243,7 +243,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                 key={table.tableId}
                 type="button"
                 onClick={() => openTableHistory(table)}
-                className="block w-full rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md"
+                className="block w-full rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -252,14 +252,14 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                         Table {table.tableNumber}
                       </span>
                       <Badge status={table.status}>{table.status}</Badge>
-                      <span className="text-xs text-gray-500">{formatTimeAgo(table.latestCreatedAt)}</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{formatTimeAgo(table.latestCreatedAt)}</span>
                     </div>
-                    <p className="mt-2 truncate text-sm font-medium text-gray-900">
+                    <p className="mt-2 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'} for this table
                     </p>
-                    <p className="mt-1 text-xs text-gray-500">Click to view full order history</p>
+                    <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">Click to view full order history</p>
                   </div>
-                  <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+                  <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
                     {formatCurrency(table.total, currency)}
                   </p>
                 </div>
@@ -275,7 +275,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-500">Page {recentPage + 1}</span>
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {recentPage + 1}</span>
               <Button
                 type="button"
                 variant="outline"
@@ -300,7 +300,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
       >
         <div className="space-y-4">
           {loadingTableHistory && (
-            <p className="text-sm text-gray-500">Loading order history...</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading order history...</p>
           )}
 
           {!loadingTableHistory && tableHistory.length === 0 && (
@@ -311,34 +311,34 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
             <div className="space-y-4">
               <div className="space-y-3">
                 {tableHistory.map((order) => (
-                <div key={order.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div key={order.id} className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-900">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                           Order #{order.id.slice(0, 8)}
                         </span>
                         <Badge status={order.status}>{order.status}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
                         Placed {formatDate(order.created_at)}
                       </p>
                     </div>
-                    <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+                    <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
                       {formatCurrency(order.total_amount || 0, currency)}
                     </p>
                   </div>
 
                   {order.items?.length > 0 ? (
-                    <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
+                    <div className="mt-3 space-y-1 border-t border-gray-100 pt-3 dark:border-gray-800">
                       {order.items.map((item) => (
                         <div key={item.id} className="space-y-0.5">
                           <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
-                            <span className="font-medium text-gray-900">{item.quantity}x</span>
-                            <span className="min-w-0 truncate text-gray-600">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">{item.quantity}x</span>
+                            <span className="min-w-0 truncate font-medium text-gray-600 dark:text-gray-300">
                               {item.menu_item?.name || 'Item'}
                             </span>
-                            <span className="font-medium text-gray-900">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
                               {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
                             </span>
                           </div>
@@ -351,7 +351,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-500">
+                    <p className="mt-3 border-t border-gray-100 pt-3 text-sm font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
                       No items recorded for this order.
                     </p>
                   )}
@@ -368,7 +368,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                 >
                   Previous
                 </Button>
-                <span className="text-sm text-gray-500">Page {tableHistoryPage + 1}</span>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {tableHistoryPage + 1}</span>
                 <Button
                   type="button"
                   variant="outline"
