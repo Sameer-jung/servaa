@@ -66,31 +66,31 @@ interface BillingTableGroupProps {
 
 function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency, isSending, isMarkingPaid  }: BillingTableGroupProps) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900">Table {group.tableNumber}</p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Table {group.tableNumber}</p>
+          <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
             {group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'} - latest {formatDate(group.latestCreatedAt)}
           </p>
         </div>
-        <p className="flex-shrink-0 text-lg font-bold text-gray-900">
+        <p className="flex-shrink-0 text-lg font-bold text-gray-900 dark:text-gray-100">
           {formatCurrency(group.total, currency)}
         </p>
       </div>
 
-      <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+      <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
         {group.invoices.map((invoice) => (
-          <div key={invoice.id} className="rounded-lg bg-gray-50 p-3">
+          <div key={invoice.id} className="rounded-lg bg-gray-50 p-3 dark:bg-gray-950">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900">#{invoice.invoice_number}</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">#{invoice.invoice_number}</span>
                   <Badge status={invoice.payment_status}>{invoice.payment_status}</Badge>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">{formatDate(invoice.created_at)}</p>
+                <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{formatDate(invoice.created_at)}</p>
               </div>
-              <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+              <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
                 {formatCurrency(invoice.grand_total, currency)}
               </p>
             </div>
@@ -261,18 +261,18 @@ function BillingContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Billing</h1>
-        <p className="text-sm text-gray-500">Manage invoices and payments</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Billing</h1>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage invoices and payments</p>
       </div>
 
       {message && (
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
           {message}
         </div>
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
           Unpaid Invoices
         </h2>
         {unpaidInvoiceGroups.length > 0 ? (
@@ -304,7 +304,7 @@ function BillingContent() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Page {unpaidPage + 1}
               </span>
               <Button
@@ -324,7 +324,7 @@ function BillingContent() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
           Paid / Completed Invoices
         </h2>
         {paidInvoiceGroups.length > 0 ? (
@@ -355,7 +355,7 @@ function BillingContent() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-500">Page {paidPage + 1}</span>
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {paidPage + 1}</span>
               <Button
                 type="button"
                 variant="outline"

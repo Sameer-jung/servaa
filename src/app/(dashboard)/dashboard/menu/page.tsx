@@ -252,8 +252,8 @@ function MenuContent() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Menu</h1>
-          <p className="text-sm text-gray-500">Manage your menu items and categories</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Menu</h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage your menu items and categories</p>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" disabled={!restaurant} onClick={() => setShowCategoryModal(true)}>
@@ -276,7 +276,7 @@ function MenuContent() {
         <button
           onClick={() => setActiveCategory(null)}
           className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-            activeCategory === null ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+            activeCategory === null ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
           }`}
         >
           All
@@ -286,14 +286,14 @@ function MenuContent() {
             <button
               onClick={() => setActiveCategory(cat.id)}
               className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-                activeCategory === cat.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+                activeCategory === cat.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
               }`}
             >
               {cat.name}
             </button>
             <button
               onClick={() => { setEditingCategory(cat); setShowCategoryModal(true) }}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -318,11 +318,11 @@ function MenuContent() {
             <div
               key={item.id}
               className={`flex items-center justify-between rounded-lg border p-3 ${
-                item.available ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
+                item.available ? 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900' : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-950'
               }`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
                   {item.image_url ? (
                     <img
                       src={item.image_url}
@@ -330,7 +330,7 @@ function MenuContent() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-gray-300">
+                    <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-500">
                       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
@@ -339,28 +339,28 @@ function MenuContent() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-gray-900">{item.name}</span>
+                    <span className="truncate font-semibold text-gray-900 dark:text-gray-100">{item.name}</span>
                     {!item.available && (
-                      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500">
+                      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                         Unavailable
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">{formatCurrency(item.price, restaurant?.currency)}</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{formatCurrency(item.price, restaurant?.currency)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleToggleAvailability(item)}
                   className={`rounded-lg px-2 py-1 text-xs font-medium ${
-                    item.available ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                    item.available ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
                   }`}
                 >
                   {item.available ? 'Available' : 'Unavailable'}
                 </button>
                 <button
                   onClick={() => { setEditingItem(item); setShowItemModal(true) }}
-                  className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -421,8 +421,8 @@ function MenuContent() {
           <Input name="image_url" label="Image URL" type="url" placeholder="https://example.com/item.jpg" defaultValue={editingItem?.image_url || ''} />
           <Input name="price" label="Price" type="number" step="0.01" min="0" defaultValue={editingItem?.price || ''} required />
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Category</label>
-            <select name="category_id" defaultValue={editingItem?.category_id || ''} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base">
+            <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Category</label>
+            <select name="category_id" defaultValue={editingItem?.category_id || ''} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
               <option value="">No Category</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -431,7 +431,7 @@ function MenuContent() {
           </div>
           <label className="flex items-center gap-2">
             <input type="checkbox" name="available" defaultChecked={editingItem ? editingItem.available : true} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
-            <span className="text-sm text-gray-700">Available</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Available</span>
           </label>
           <Button type="submit" className="w-full">
             {editingItem ? 'Update' : 'Create'}

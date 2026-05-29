@@ -39,14 +39,14 @@ export default async function DashboardPage() {
   if (!restaurantId) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm max-w-md w-full">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 mb-4">
+        <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm max-w-md w-full dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 mb-4 dark:bg-brand-950 dark:text-brand-300">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">Finish Your Setup</h2>
-          <p className="mt-2 text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Finish Your Setup</h2>
+          <p className="mt-2 text-sm font-medium text-gray-500 dark:text-gray-400">
             Your account is created. Now let&apos;s set up your restaurant profile.
           </p>
           <form
@@ -97,32 +97,32 @@ export default async function DashboardPage() {
             className="mt-6 space-y-4 text-left"
           >
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Restaurant Name</label>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Restaurant Name</label>
               <input
                 name="name"
                 type="text"
                 required
                 defaultValue={user.user_metadata?.full_name || ''}
                 placeholder="My Restaurant"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Address</label>
-              <input name="address" type="text" placeholder="Pokhara , XXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Address</label>
+              <input name="address" type="text" placeholder="Pokhara , XXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone</label>
-              <input name="phone" type="text" placeholder="+977 98XXXXXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Phone</label>
+              <input name="phone" type="text" placeholder="+977 98XXXXXXXX" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Tax Rate (%)</label>
-              <input name="tax_rate" type="number" placeholder="13" min="0" max="100" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Tax Rate (%)</label>
+              <input name="tax_rate" type="number" placeholder="13" min="0" max="100" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Currency</label>
-              <select name="currency" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Currency</label>
+              <select name="currency" className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
                 <option value="NPR">NPR</option>
                 <option value="USD">USD</option>
                 <option value="INR">INR</option>
