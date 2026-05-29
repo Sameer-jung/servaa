@@ -147,8 +147,8 @@ function TablesContent() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tables</h1>
-          <p className="text-sm text-gray-500">Manage tables and QR codes</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Tables</h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage tables and QR codes</p>
         </div>
         <Button disabled={!restaurant} onClick={() => setShowModal(true)}>+ Add Table</Button>
       </div>
@@ -166,13 +166,13 @@ function TablesContent() {
               {table.qr_code ? (
                 <QRCodeDisplay tableNumber={table.table_number} qrCodeUrl={table.qr_code} restaurantName={restaurant?.name || ''} />
               ) : (
-                <div className="rounded-lg border border-gray-200 bg-white p-3">
-                  <div className="flex aspect-square items-center justify-center rounded-lg bg-gray-50">
+                <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex aspect-square items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-950">
                     <Button size="sm" isLoading={generatingQR === table.id} onClick={() => generateQRForTable(table)}>
                       Generate QR
                     </Button>
                   </div>
-                  <p className="mt-2 text-center text-sm font-medium text-gray-700">Table {table.table_number}</p>
+                  <p className="mt-2 text-center text-sm font-semibold text-gray-700 dark:text-gray-200">Table {table.table_number}</p>
                 </div>
               )}
               <button

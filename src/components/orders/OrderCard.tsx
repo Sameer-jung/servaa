@@ -41,7 +41,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
 
   if (compact) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -49,13 +49,13 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
                 Table {tableNumber}
               </span>
               <Badge status={order.status}>{order.status}</Badge>
-              <span className="text-xs text-gray-500">{formatTimeAgo(order.created_at)}</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{formatTimeAgo(order.created_at)}</span>
             </div>
-            <p className="mt-2 truncate text-sm font-medium text-gray-900">
+            <p className="mt-2 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
               {getItemSummary(order)}
             </p>
           </div>
-          <p className="flex-shrink-0 text-sm font-bold text-gray-900">
+          <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
             {formatCurrency(order.total_amount || 0, currency)}
           </p>
         </div>
@@ -64,20 +64,20 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Order #{order.id.slice(0, 8)}
             </span>
             <Badge status={order.status}>{order.status}</Badge>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
             Table {tableNumber} - {formatTimeAgo(order.created_at)}
           </p>
         </div>
-        <p className="text-lg font-bold text-gray-900 flex-shrink-0">
+        <p className="text-lg font-bold text-gray-900 flex-shrink-0 dark:text-gray-100">
           {formatCurrency(order.total_amount || 0, currency)}
         </p>
       </div>
@@ -87,10 +87,10 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
           {order.items.map((item) => (
             <div key={item.id} className="space-y-0.5 text-sm">
               <div className="flex justify-between gap-3">
-                <span className="text-gray-600">
+                <span className="font-medium text-gray-600 dark:text-gray-300">
                   {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
                 </span>
-                <span className="text-gray-500">
+                <span className="font-medium text-gray-500 dark:text-gray-400">
                   {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
                 </span>
               </div>

@@ -20,13 +20,13 @@ export function MobileNav() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:hidden">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:hidden dark:border-gray-800 dark:bg-gray-900">
         <Link href="/dashboard" className="text-lg font-bold text-brand-600" onClick={() => setIsOpen(false)}>
           Servaa
         </Link>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-700 active:bg-gray-100"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-700 active:bg-gray-100 dark:text-gray-200 dark:active:bg-gray-800"
           aria-label="Open navigation menu"
         >
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -46,7 +46,7 @@ export function MobileNav() {
       {/* Menu panel */}
       <div 
         className={cn(
-          'fixed left-3 right-3 top-20 z-50 rounded-xl bg-white p-2 shadow-xl transition-all duration-200 lg:hidden',
+          'fixed left-3 right-3 top-20 z-50 rounded-xl bg-white p-2 shadow-xl transition-all duration-200 lg:hidden dark:bg-gray-900',
           isOpen ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-2 opacity-0'
         )}
       >
@@ -64,11 +64,11 @@ export function MobileNav() {
                 isOrders ? 'text-base' : 'text-sm',
                 isActive
                   ? isOrders
-                    ? 'bg-red-50 text-red-700'
-                    : 'bg-brand-50 text-brand-700'
+                    ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                    : 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-200'
                   : isOrders
-                    ? 'text-red-600 hover:bg-red-50'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950'
+                    : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
               )}
             >
               {item.label}

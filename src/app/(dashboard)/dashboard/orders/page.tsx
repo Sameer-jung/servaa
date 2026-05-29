@@ -111,7 +111,7 @@ function TableOrderCard({
   const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <button
         type="button"
         onClick={onToggle}
@@ -119,21 +119,21 @@ function TableOrderCard({
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-gray-900">Table {group.tableNumber}</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Table {group.tableNumber}</span>
             <Badge status={group.status}>{group.status}</Badge>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
             {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'} - {activeCount} active - {formatTimeAgo(group.latestCreatedAt)}
           </p>
         </div>
         <div className="flex-shrink-0 text-right">
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.total, currency)}</p>
-          <p className="mt-1 text-xs text-gray-500">{expanded ? 'Hide' : 'View'} orders</p>
+          <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(group.total, currency)}</p>
+          <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{expanded ? 'Hide' : 'View'} orders</p>
         </div>
       </button>
 
       {expanded && (
-        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4 dark:border-gray-800">
           {group.orders.map((order) => (
             <OrderCard
               key={order.id}
@@ -336,8 +336,8 @@ function OrdersContent() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-        <p className="text-sm text-gray-500">Manage incoming orders in real-time</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Orders</h1>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage incoming orders in real-time</p>
       </div>
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
@@ -370,7 +370,7 @@ function OrdersContent() {
             >
               Previous
             </Button>
-            <span className="text-sm text-gray-500">Page {page + 1}</span>
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {page + 1}</span>
             <Button
               type="button"
               variant="outline"

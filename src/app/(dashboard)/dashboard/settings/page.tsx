@@ -100,8 +100,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">Manage your restaurant details</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage your restaurant details</p>
       </div>
 
       {error && (
@@ -112,10 +112,10 @@ export default function SettingsPage() {
 
       {/* Restaurant Name Card */}
       {restaurant && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-sm text-gray-500">Restaurant Name</p>
-          <p className="text-lg font-semibold text-gray-900">{restaurant.name}</p>
-          <p className="text-xs text-gray-400 mt-1">Slug: {restaurant.slug}</p>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Restaurant Name</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{restaurant.name}</p>
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-1">Slug: {restaurant.slug}</p>
         </div>
       )}
 
@@ -146,11 +146,11 @@ export default function SettingsPage() {
           defaultValue={restaurant?.tax_rate || 0}
         />
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">Currency</label>
+          <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Currency</label>
           <select
             name="currency"
             defaultValue={restaurant?.currency || 'NPR'}
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             {currencyOptions.map((currency) => (
               <option key={currency} value={currency}>
@@ -166,10 +166,10 @@ export default function SettingsPage() {
         </div>
       </form>
 
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <h3 className="font-medium text-gray-900">Menu URL</h3>
-        <p className="mt-1 text-sm text-gray-500">Share this URL with customers</p>
-        <code className="mt-2 block rounded bg-white p-2 text-sm text-gray-700 break-all">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Menu URL</h3>
+        <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">Share this URL with customers</p>
+        <code className="mt-2 block rounded bg-white p-2 text-sm text-gray-700 break-all dark:bg-gray-950 dark:text-gray-200">
           {menuUrl || 'Loading...'}
         </code>
       </div>

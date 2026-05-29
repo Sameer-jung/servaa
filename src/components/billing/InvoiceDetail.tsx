@@ -21,11 +21,11 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
     <Modal isOpen={isOpen} onClose={onClose} title={`Invoice #${invoice.invoice_number}`}>
       <div className="space-y-4">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Date</span>
-          <span className="font-medium">{formatDate(invoice.created_at)}</span>
+          <span className="font-medium text-gray-500 dark:text-gray-400">Date</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{formatDate(invoice.created_at)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Status</span>
+          <span className="font-medium text-gray-500 dark:text-gray-400">Status</span>
           <span className={
             invoice.payment_status === 'paid' ? 'font-medium text-emerald-600' : 'font-medium text-amber-600'
           }>
@@ -33,32 +33,32 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Payment Method</span>
-          <span className="font-medium">{invoice.payment_method || 'N/A'}</span>
+          <span className="font-medium text-gray-500 dark:text-gray-400">Payment Method</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{invoice.payment_method || 'N/A'}</span>
         </div>
 
-        <div className="border-t border-gray-100 pt-4">
-          <h4 className="mb-2 text-sm font-medium text-gray-900">Order Items</h4>
+        <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+          <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Order Items</h4>
           {invoice.order?.items?.map((item) => (
             <div key={item.id} className="flex justify-between py-1 text-sm">
-              <span className="text-gray-600">
+              <span className="font-medium text-gray-600 dark:text-gray-300">
                 {item.quantity}x {item.menu_item?.name || 'Item'}
               </span>
-              <span className="text-gray-900">{formatCurrency(item.price_snapshot * item.quantity, currency)}</span>
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(item.price_snapshot * item.quantity, currency)}</span>
             </div>
           ))}
         </div>
 
-        <div className="border-t border-gray-100 pt-4 space-y-2">
+        <div className="border-t border-gray-100 pt-4 space-y-2 dark:border-gray-800">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Subtotal</span>
-            <span>{formatCurrency(invoice.subtotal, currency)}</span>
+            <span className="font-medium text-gray-500 dark:text-gray-400">Subtotal</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(invoice.subtotal, currency)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Tax</span>
-            <span>{formatCurrency(invoice.tax_amount, currency)}</span>
+            <span className="font-medium text-gray-500 dark:text-gray-400">Tax</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(invoice.tax_amount, currency)}</span>
           </div>
-          <div className="flex justify-between text-lg font-bold">
+          <div className="flex justify-between text-lg font-bold text-gray-900 dark:text-gray-100">
             <span>Grand Total</span>
             <span>{formatCurrency(invoice.grand_total, currency)}</span>
           </div>
