@@ -116,10 +116,10 @@ export function OrderNotifications() {
 
           toast.custom(
             (t) => (
-              <div className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
-                <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+              <div className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{title}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</p>
                     <span className="mt-1 inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
                       Table {tableNumber}
                     </span>
@@ -127,7 +127,7 @@ export function OrderNotifications() {
                   <button
                     type="button"
                     onClick={() => toast.dismiss(t.id)}
-                    className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    className="rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                   >
                     Close
                   </button>
@@ -138,9 +138,9 @@ export function OrderNotifications() {
                     items.map((item) => (
                       <div key={item.id} className="space-y-0.5">
                         <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
-                          <span className="font-medium text-gray-900">{item.quantity}x</span>
-                          <span className="truncate text-gray-700">{item.menu_item?.name || 'Item'}</span>
-                          <span className="font-medium text-gray-900">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">{item.quantity}x</span>
+                          <span className="truncate font-medium text-gray-700 dark:text-gray-300">{item.menu_item?.name || 'Item'}</span>
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
                             {formatCurrency((item.price_snapshot || 0) * item.quantity, restaurant.currency)}
                           </span>
                         </div>
@@ -153,15 +153,15 @@ export function OrderNotifications() {
                     ))
                   ) : (
                     <div className="grid grid-cols-[auto_1fr] gap-2 text-sm">
-                      <span className="font-medium text-gray-900">1x</span>
-                      <span className="text-gray-700">{requestLabel || 'Order item'}</span>
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">1x</span>
+                      <span className="font-medium text-gray-700 dark:text-gray-300">{requestLabel || 'Order item'}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
-                  <span className="font-semibold text-gray-900">Total</span>
-                  <span className="font-bold text-gray-900">
+                <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-sm dark:border-gray-800">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">Total</span>
+                  <span className="font-bold text-gray-900 dark:text-gray-100">
                     {formatCurrency(notificationOrder.total_amount || 0, restaurant.currency)}
                   </span>
                 </div>

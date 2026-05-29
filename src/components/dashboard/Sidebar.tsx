@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/utils/cn'
-import { LogoutButton } from '@/components/auth/LogoutButton'
+import { ProfileMenu } from './ProfileMenu'
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -18,8 +18,8 @@ export function DashboardSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-gray-200 bg-white lg:flex">
-      <div className="flex h-16 items-center border-b border-gray-200 px-6">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-gray-200 bg-white lg:flex dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex h-16 items-center border-b border-gray-200 px-6 dark:border-gray-800">
         <Link href="/dashboard" className="text-xl font-bold text-brand-600">
           Servaa
         </Link>
@@ -38,11 +38,11 @@ export function DashboardSidebar() {
                 isOrders ? 'border-l-4 border-red-500 px-2 text-base' : 'px-3 text-sm',
                 isActive
                   ? isOrders
-                    ? 'bg-red-50 text-red-700'
-                    : 'bg-brand-50 text-brand-700'
+                    ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                    : 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-200'
                   : isOrders
-                    ? 'text-red-600 hover:bg-red-50 hover:text-red-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-300 dark:hover:bg-red-950 dark:hover:text-red-200'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
               )}
             >
               <svg className="mr-3 h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -53,8 +53,8 @@ export function DashboardSidebar() {
           )
         })}
       </nav>
-      <div className="border-t border-gray-200 p-4">
-        <LogoutButton />
+      <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+        <ProfileMenu />
       </div>
     </aside>
   )
