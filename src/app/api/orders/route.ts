@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     const restaurantId = body?.restaurantId
     const tableId = body?.tableId
     const items = validateOrderItems(body?.items)
+    const customerSessionId = readTrimmedString(body?.customerSessionId, 128);
     const clientRequestId = readTrimmedString(body?.clientRequestId, 128)
     const tableToken = readTrimmedString(body?.tableToken, 256) || getBearerToken(request)
 
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
         status: 'pending',
         total_amount: totalAmount,
         client_request_id: clientRequestId,
-        customer_session_id: tableToken ? hashTableAccessToken(tableToken) : null,
+        customer_session_id: customerSessionId || null,
       })
       .select()
       .single()
