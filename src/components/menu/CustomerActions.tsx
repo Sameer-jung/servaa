@@ -10,10 +10,10 @@ import { Modal } from '@/components/ui/Modal'
 interface CustomerActionsProps {
   restaurantId: string
   tableId: string
-  tableToken?: string
+  customerSessionId?: string | null
 }
 
-export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerActionsProps) {
+export function CustomerActions({ restaurantId, tableId, customerSessionId }: CustomerActionsProps) {
   const [requesting, setRequesting] = useState<'water' | 'bill' | null>(null)
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [showOrderFirst, setShowOrderFirst] = useState(false)
@@ -24,6 +24,7 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
       .from('orders')
       .select('id, special_instructions, items:order_items(id)')
       .eq('table_id', tableId)
+      .eq('customer_session_id', customerSessionId)
       .order('created_at', { ascending: false })
       .limit(25)
 
@@ -37,6 +38,12 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
     setRequesting(type)
 
     if (type === 'bill') {
+      if (!customerSessionId) {
+        setRequesting(null)
+        toast.error("Please refresh the page and try again.");
+        return;
+      }
+
       const hasOrders = await tableHasOrders()
       if (!hasOrders) {
         setRequesting(null)
@@ -53,7 +60,7 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
         table_id: tableId,
         request_type: type,
         status: 'pending',
-        customer_session_id: tableToken || null,
+        customer_session_id: customerSessionId,
       })
       .select('id')
       .maybeSingle()
@@ -64,7 +71,7 @@ export function CustomerActions({ restaurantId, tableId, tableToken }: CustomerA
       status: 'pending',
       total_amount: 0,
       special_instructions: type === 'water' ? 'REQUEST: Water' : 'REQUEST: Bill',
-      customer_session_id: tableToken || null,
+      customer_session_id: customerSessionId,
     }).select('id').maybeSingle()
   
     if (serviceRequest.data?.id && legacyOrder?.id) {
