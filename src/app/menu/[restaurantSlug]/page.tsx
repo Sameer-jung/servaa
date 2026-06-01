@@ -89,32 +89,13 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
       console.error('Failed to load menu items:', itemsError)
     }
 
-    // Get active orders for this table
-    let activeOrders = null
-    if (table) {
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('*, items:order_items(*, menu_item:menu_items(name, price))')
-        .eq('table_id', table.id)
-        .in('status', ['pending', 'accepted', 'preparing', 'ready'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (ordersError) {
-        console.error('Failed to load active table order:', ordersError)
-      }
-
-      activeOrders = orders
-    }
-
     return (
       <MenuClient
         restaurant={restaurant}
         table={table}
         categories={categories || []}
         items={items || []}
-        activeOrder={activeOrders}
+        activeOrder={null}
         tableToken={tableToken}
       />
     )

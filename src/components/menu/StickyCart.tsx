@@ -9,14 +9,15 @@ import { Order } from '@/types'
 import { isUuid } from '@/utils/validation'
 
 interface StickyCartProps {
-  restaurantId: string
-  tableId: string
-  tableToken?: string
-  currency?: string
-  onOrderPlaced?: (order: Order) => void
+  restaurantId: string;
+  tableId: string;
+  tableToken?: string;
+  currency?: string;
+  customerSessionId?: string | null;
+  onOrderPlaced?: (order: Order) => void;
 }
 
-export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrderPlaced }: StickyCartProps) {
+export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrderPlaced, customerSessionId }: StickyCartProps) {
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState(false)
   const [error, setError] = useState('')
@@ -48,6 +49,7 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
           tableId,
           tableToken,
           clientRequestId,
+          customerSessionId,
           items: cart.items.map((item) => ({
             menuItemId: item.menuItem.id,
             quantity: item.quantity,

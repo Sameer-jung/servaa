@@ -22,6 +22,7 @@ interface MenuClientProps {
 export function MenuClient({ restaurant, table, categories, items, activeOrder, tableToken }: MenuClientProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(activeOrder)
+  const [customerSessionId, setCustomerSessionId] = useState<string | null>(null)
   const cart = useCartStore()
   const hasCartItems = cart.totalItems > 0
 
@@ -30,6 +31,41 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       cart.setRestaurantContext(restaurant.id, table.id)
     }
   }, [restaurant.id, table, cart])
+
+  useEffect(() => {
+    if (!table) return;
+
+    const key = `servaa:customer-session:${table.id}`;
+    const existing = sessionStorage.getItem(key);
+
+    if (existing) {
+      setCustomerSessionId(existing);
+      return;
+    }
+
+    const nextSessionId = crypto.randomUUID();
+    sessionStorage.setItem(key, nextSessionId);
+    setCustomerSessionId(nextSessionId);
+  }, [table]);
+
+  useEffect(() => {
+    if (!table || !customerSessionId) return;
+
+    const fetchSessionOrder = async () => {
+      const params = new URLSearchParams({
+        tableId: table.id,
+        customerSessionId,
+      });
+
+      const response = await fetch(`/api/orders/session?${params.toString()}`);
+      if (!response.ok) return;
+
+      const result = await response.json().catch(() => null);
+      setTrackedOrder(result?.order || null);
+    };
+
+    fetchSessionOrder();
+  }, [table, customerSessionId]);
 
   const filteredItems = activeCategory
     ? items.filter((item) => item.category_id === activeCategory)
@@ -41,7 +77,13 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
   }
 
   return (
-    <div className={hasCartItems ? 'min-h-screen bg-gray-50 pb-80' : 'min-h-screen bg-gray-50 pb-32'}>
+    <div
+      className={
+        hasCartItems
+          ? "min-h-screen bg-gray-50 pb-80"
+          : "min-h-screen bg-gray-50 pb-32"
+      }
+    >
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
         <div className="px-4 py-3">
@@ -82,7 +124,9 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               quantity={getItemQuantity(item.id)}
               currency={restaurant.currency}
               onAdd={() => cart.addItem(item)}
-              onRemove={() => cart.updateQuantity(item.id, getItemQuantity(item.id) - 1)}
+              onRemove={() =>
+                cart.updateQuantity(item.id, getItemQuantity(item.id) - 1)
+              }
             />
           ))
         ) : (
@@ -100,10 +144,21 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             tableId={table.id}
             tableToken={tableToken}
             currency={restaurant.currency}
+            customerSessionId={customerSessionId}
             onOrderPlaced={setTrackedOrder}
           />
-          {!hasCartItems && <CustomerActions restaurantId={restaurant.id} tableId={table.id} tableToken={tableToken} />}
-          <TableInvoice tableId={table.id} tableToken={tableToken} currency={restaurant.currency} />
+          {!hasCartItems && (
+            <CustomerActions
+              restaurantId={restaurant.id}
+              tableId={table.id}
+              customerSessionId={customerSessionId}
+            />
+          )}
+          <TableInvoice
+            tableId={table.id}
+            tableToken={tableToken}
+            currency={restaurant.currency}
+          />
         </>
       )}
 
@@ -116,5 +171,5 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
         </div>
       )}
     </div>
-  )
+  );
 }
