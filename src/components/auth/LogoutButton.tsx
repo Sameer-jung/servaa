@@ -27,7 +27,7 @@ export function LogoutButton() {
 
   return (
 
-    <Button variant="ghost" size="sm" isLoading={loading} onClick={handleLogout} className=" border-gray-950 bg-red-700 ">
+    <Button variant="ghost" size="sm" isLoading={loading} onClick={handleLogout} className=" border-gray-950 bg-red-700 text-white hover:bg-red-500">
       {loading? 'Signing out...' : 'Sign out'}
     </Button>
   )
