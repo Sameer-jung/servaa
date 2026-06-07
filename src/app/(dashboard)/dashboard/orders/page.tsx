@@ -3,6 +3,7 @@
 import {toast} from "react-hot-toast"
 import {MESSAGES} from "@/utils/messages"
 import { useState, useEffect, useCallback, Suspense } from 'react'
+import { ArrowLeft, Minus, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { useRealtimeOrders } from '@/hooks/useRealtime'
@@ -13,7 +14,7 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
-import { OrderStatus, OrderWithItems } from '@/types'
+import { MenuCategory, MenuItem, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
 import { writeAuditLog } from '@/utils/audit'
 
 const tabs = [
@@ -87,6 +88,409 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableOrderGroup[] {
   )
 }
 
+type PosCartItem = {
+  menuItem: MenuItem
+  quantity: number
+}
+
+interface StaffPosOrderEntryProps {
+  restaurant: Restaurant
+  onBack: () => void
+  onOrderCreated: () => void
+}
+
+function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrderEntryProps) {
+  const [tables, setTables] = useState<Table[]>([])
+  const [categories, setCategories] = useState<MenuCategory[]>([])
+  const [items, setItems] = useState<MenuItem[]>([])
+  const [selectedTableId, setSelectedTableId] = useState('')
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [cartItems, setCartItems] = useState<PosCartItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const supabase = createClient()
+
+  const fetchPosData = useCallback(async () => {
+    setLoading(true)
+
+    const [{ data: tableData }, { data: categoryData }, { data: menuItemData }] = await Promise.all([
+      supabase
+        .from('tables')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .eq('is_active', true)
+        .order('table_number'),
+      supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .order('sort_order'),
+      supabase
+        .from('menu_items')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .eq('available', true)
+        .order('sort_order'),
+    ])
+
+    const nextTables = (tableData as Table[] | null) || []
+    setTables(nextTables)
+    setCategories((categoryData as MenuCategory[] | null) || [])
+    setItems((menuItemData as MenuItem[] | null) || [])
+    setSelectedTableId((current) => current || nextTables[0]?.id || '')
+    setLoading(false)
+  }, [restaurant.id, supabase])
+
+  useEffect(() => {
+    fetchPosData()
+  }, [fetchPosData])
+
+  const addItem = (menuItem: MenuItem) => {
+    setCartItems((current) => {
+      const existing = current.find((item) => item.menuItem.id === menuItem.id)
+      if (existing) {
+        return current.map((item) =>
+          item.menuItem.id === menuItem.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+
+      return [...current, { menuItem, quantity: 1 }]
+    })
+  }
+
+  const updateQuantity = (menuItemId: string, quantity: number) => {
+    setCartItems((current) => {
+      if (quantity <= 0) {
+        return current.filter((item) => item.menuItem.id !== menuItemId)
+      }
+
+      return current.map((item) =>
+        item.menuItem.id === menuItemId ? { ...item, quantity } : item
+      )
+    })
+  }
+
+  const removeItem = (menuItemId: string) => {
+    setCartItems((current) => current.filter((item) => item.menuItem.id !== menuItemId))
+  }
+
+  const getItemQuantity = (menuItemId: string) => {
+    return cartItems.find((item) => item.menuItem.id === menuItemId)?.quantity || 0
+  }
+
+  const cartTotal = cartItems.reduce(
+    (total, item) => total + Number(item.menuItem.price || 0) * item.quantity,
+    0
+  )
+  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const filteredItems = items.filter((item) => {
+    const matchesCategory = activeCategory ? item.category_id === activeCategory : true
+    const matchesSearch = normalizedSearch
+      ? item.name.toLowerCase().includes(normalizedSearch) ||
+        (item.description || '').toLowerCase().includes(normalizedSearch)
+      : true
+
+    return matchesCategory && matchesSearch
+  })
+
+  const handleSubmit = async () => {
+    if (!selectedTableId) {
+      toast.error('Select a table first.')
+      return
+    }
+
+    if (cartItems.length === 0) {
+      toast.error('Add at least one item.')
+      return
+    }
+
+    setSubmitting(true)
+
+    const clientRequestId =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'staff',
+          restaurantId: restaurant.id,
+          tableId: selectedTableId,
+          clientRequestId,
+          items: cartItems.map((item) => ({
+            menuItemId: item.menuItem.id,
+            quantity: item.quantity,
+            notes: null,
+          })),
+        }),
+      })
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.order) {
+        toast.error(result?.error || MESSAGES.customerOrder.placeFailed)
+        return
+      }
+
+      setCartItems([])
+      toast.success('Order created and sent to active orders.')
+      onOrderCreated()
+    } catch (error) {
+      console.error('[StaffPosOrderEntry] order request error:', error)
+      toast.error(MESSAGES.common.networkError)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return <PageLoading />
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Orders
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Create Order</h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manual staff entry using the same kitchen order flow</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Table</label>
+            <select
+              value={selectedTableId}
+              onChange={(event) => setSelectedTableId(event.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+            >
+              {tables.length === 0 ? (
+                <option value="">No active tables</option>
+              ) : (
+                tables.map((table) => (
+                  <option key={table.id} value={table.id}>
+                    Table {table.table_number}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory(null)}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                    activeCategory === null
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  All
+                </button>
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => setActiveCategory(category.id)}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                      activeCategory === category.id
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search menu"
+                  className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                />
+              </div>
+            </div>
+
+            {filteredItems.length > 0 ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {filteredItems.map((item) => {
+                  const quantity = getItemQuantity(item.id)
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex min-h-32 flex-col justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="min-w-0 flex-1 break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {item.name}
+                          </p>
+                          <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
+                            {formatCurrency(item.price, restaurant.currency)}
+                          </p>
+                        </div>
+                        {item.description && (
+                          <p className="mt-1 line-clamp-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        {quantity > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(item.id, quantity - 1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                              aria-label={`Decrease ${item.name}`}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <span className="w-8 text-center text-sm font-bold text-gray-900 dark:text-gray-100">
+                              {quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                              aria-label={`Increase ${item.name}`}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <Button type="button" size="sm" className="gap-2" onClick={() => addItem(item)}>
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <EmptyState title="No menu items" description="No available items match this search." />
+            )}
+          </div>
+        </div>
+
+        <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 lg:sticky lg:top-6 lg:self-start">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Cart</h2>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {cartCount} {cartCount === 1 ? 'item' : 'items'}
+              </p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-200">
+              <ShoppingCart className="h-5 w-5" />
+            </div>
+          </div>
+
+          {cartItems.length > 0 ? (
+            <div className="mt-4 max-h-[50vh] space-y-3 overflow-y-auto pr-1">
+              {cartItems.map((item) => (
+                <div key={item.menuItem.id} className="rounded-lg bg-gray-50 p-3 dark:bg-gray-950">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {item.menuItem.name}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {formatCurrency(item.menuItem.price, restaurant.currency)} each
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.menuItem.id)}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Remove ${item.menuItem.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(item.menuItem.id, item.quantity - 1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                        aria-label={`Decrease ${item.menuItem.name}`}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm font-bold text-gray-900 dark:text-gray-100">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(item.menuItem.id, item.quantity + 1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"
+                        aria-label={`Increase ${item.menuItem.name}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                      {formatCurrency(Number(item.menuItem.price || 0) * item.quantity, restaurant.currency)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Cart is empty" description="Add menu items to create an order." />
+          )}
+
+          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <div className="flex items-center justify-between text-base font-bold text-gray-900 dark:text-gray-100">
+              <span>Subtotal</span>
+              <span>{formatCurrency(cartTotal, restaurant.currency)}</span>
+            </div>
+            <Button
+              type="button"
+              className="mt-4 w-full gap-2"
+              disabled={!selectedTableId || cartItems.length === 0}
+              isLoading={submitting}
+              onClick={handleSubmit}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Create Order
+            </Button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
 interface TableOrderCardProps {
   group: TableOrderGroup
   expanded: boolean
@@ -154,6 +558,7 @@ function TableOrderCard({
 function OrdersContent() {
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
+  const [showCreateOrder, setShowCreateOrder] = useState(false)
   const [activeTab, setActiveTab] = useState('active')
   const [page, setPage] = useState(0)
   const [hasNextPage, setHasNextPage] = useState(false)
@@ -331,13 +736,32 @@ function OrdersContent() {
     return <PageLoading />
   }
 
+  if (showCreateOrder && restaurant) {
+    return (
+      <StaffPosOrderEntry
+        restaurant={restaurant}
+        onBack={() => setShowCreateOrder(false)}
+        onOrderCreated={() => {
+          setShowCreateOrder(false)
+          fetchOrders()
+        }}
+      />
+    )
+  }
+
   const tableGroups = groupOrdersByTable(orders)
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Orders</h1>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage incoming orders in real-time</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Orders</h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage incoming orders in real-time</p>
+        </div>
+        <Button type="button" className="gap-2 sm:self-start" onClick={() => setShowCreateOrder(true)}>
+          <Plus className="h-4 w-4" />
+          Create Order
+        </Button>
       </div>
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
