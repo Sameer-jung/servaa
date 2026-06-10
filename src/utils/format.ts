@@ -5,14 +5,14 @@ export function formatCurrency(amount: number, currency = 'NPR'): string {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: safeCurrency,
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(amount)
   } catch {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'NPR',
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(amount)
   }
