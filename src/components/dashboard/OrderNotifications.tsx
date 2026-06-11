@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { formatCurrency } from '@/utils/format'
@@ -74,6 +75,7 @@ function playAlertSound() {
 export function OrderNotifications() {
   const { restaurant } = useRestaurant()
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     if (!restaurant) return
@@ -116,7 +118,13 @@ export function OrderNotifications() {
 
           toast.custom(
             (t) => (
-              <div className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+              <div 
+                className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl cursor-pointer hover:border-gray-300 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  router.push('/dashboard/orders')
+                }}
+              >
                 <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</p>
@@ -126,7 +134,10 @@ export function OrderNotifications() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => toast.dismiss(t.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toast.dismiss(t.id)
+                    }}
                     className="rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                   >
                     Close

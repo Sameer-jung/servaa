@@ -34,7 +34,9 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
         </div>
         <div className="flex justify-between text-sm">
           <span className="font-medium text-gray-500 dark:text-gray-400">Payment Method</span>
-          <span className="font-semibold text-gray-900 dark:text-gray-100">{invoice.payment_method || 'N/A'}</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-100">
+            {invoice.payment_method === 'cash' ? '💵 Cash' : invoice.payment_method === 'online' ? '📱 Online' : 'N/A'}
+          </span>
         </div>
 
         <div className="border-t border-gray-100 pt-4 dark:border-gray-800">

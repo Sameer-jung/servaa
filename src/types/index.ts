@@ -117,6 +117,7 @@ export interface Order {
 export interface OrderWithItems extends Order {
   items: OrderItem[]
   table: Table
+  invoices?: { payment_method?: string | null }[]
 }
 
 // ============================================

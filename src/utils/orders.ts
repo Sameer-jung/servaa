@@ -3,6 +3,7 @@ export function getServiceRequestLabel(order: { special_instructions?: string | 
 
   if (instruction === 'request: water') return 'Water'
   if (instruction === 'request: bill') return 'Bill'
+  if (instruction === 'request: waiter') return 'Waiter'
 
   return null
 }

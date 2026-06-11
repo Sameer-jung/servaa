@@ -15,6 +15,15 @@ function validatePaymentStatus(value: unknown): PaymentStatus | null {
     : null
 }
 
+const paymentMethods = ['cash', 'online'] as const
+type PaymentMethod = (typeof paymentMethods)[number]
+
+function validatePaymentMethod(value: unknown): PaymentMethod | null {
+  return typeof value === 'string' && paymentMethods.includes(value as PaymentMethod)
+    ? value as PaymentMethod
+    : null
+}
+
 async function generateInvoiceNumber(restaurantId: string) {
   const now = new Date()
   const prefix = [
@@ -257,9 +266,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { invoiceId, payment_status } = await request.json()
+    const { invoiceId, payment_status, payment_method } = await request.json()
 
     const cleanPaymentStatus = validatePaymentStatus(payment_status)
+    const cleanPaymentMethod = validatePaymentMethod(payment_method)
 
     if (!isUuid(invoiceId) || !cleanPaymentStatus) {
       return NextResponse.json({ error: 'Invalid invoice update' }, { status: 400 })
@@ -291,9 +301,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const updates = {
+    const updates: Record<string, unknown> = {
       payment_status: cleanPaymentStatus,
       paid_at: cleanPaymentStatus === 'paid' ? new Date().toISOString() : null,
+    }
+
+    if (cleanPaymentStatus === 'paid' && cleanPaymentMethod) {
+      updates.payment_method = cleanPaymentMethod
     }
 
     const { data: updatedInvoice, error: updateError } = await supabaseAdmin
@@ -317,6 +331,7 @@ export async function PATCH(request: Request) {
         entityId: invoiceId,
         metadata: {
           payment_status: cleanPaymentStatus,
+          payment_method: cleanPaymentMethod,
         },
       })
     }

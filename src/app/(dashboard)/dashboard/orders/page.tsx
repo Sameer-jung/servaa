@@ -657,8 +657,13 @@ function OrdersContent() {
   const handleAccept = async (orderId: string) => {
     if(updatingOrderId) return
     setUpdatingOrderId(orderId)
-    applyOptimisticStatus(orderId, 'accepted')
-    const { error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId)
+    
+    const order = orders.find(o => o.id === orderId)
+    const isLegacy = order?.special_instructions?.toLowerCase().startsWith('request:')
+    const targetStatus = isLegacy ? 'completed' : 'accepted'
+
+    applyOptimisticStatus(orderId, targetStatus)
+    const { error } = await supabase.from('orders').update({ status: targetStatus }).eq('id', orderId)
     if (error) fetchOrders()
     if (!error && restaurant) {
       void writeAuditLog(supabase, {
@@ -666,9 +671,9 @@ function OrdersContent() {
         action: 'order.status_changed',
         entityType: 'order',
         entityId: orderId,
-        metadata: { status: 'accepted' },
+        metadata: { status: targetStatus },
       })
-      toast.success(MESSAGES.staffOrder.accepted);
+      toast.success(isLegacy ? 'Request resolved' : MESSAGES.staffOrder.accepted);
     }
     setUpdatingOrderId(null)
   }
