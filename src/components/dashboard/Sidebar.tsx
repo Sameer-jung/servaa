@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo } from "react";
+import Image from "next/image"
 import {
   ChevronRight,
   ExternalLink,
@@ -117,17 +118,23 @@ export function DashboardSidebar() {
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-gray-200 bg-white lg:flex dark:border-gray-800 dark:bg-gray-900">
       <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-800">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-            S
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-gray-900 dark:text-gray-100">
-              Servaa
-            </p>
-            <p className="truncate text-xs font-medium text-gray-500 dark:text-gray-400">
-              Restaurant OS
-            </p>
-          </div>
+          <Image
+            src="/logo/servaa.png"
+            alt="Servaa"
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 rounded-lg object-contain"
+          />
+
+          <Image
+            src="/logo/servaa_logo.png"
+            alt="Servaa"
+            width={112}
+            height={32}
+            priority
+            className="h-8 w-auto object-contain"
+          />
         </Link>
       </div>
 
@@ -214,7 +221,6 @@ export function DashboardSidebar() {
           );
         })}
       </nav>
-
 
       <div className="space-y-1 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
         {footerItems.map((item) => {
