@@ -20,7 +20,7 @@ export function CurrentBillModal({
   isOpen,
   onClose,
   tableId,
-  customerSessionId,
+  // customerSessionId,
   restaurantId,
   currency,
 }: CurrentBillModalProps) {
@@ -33,7 +33,7 @@ export function CurrentBillModal({
 
     const fetchBill = async () => {
       setLoading(true)
-      
+
       // Fetch all orders for this table that aren't cancelled
       const { data } = await supabase
         .from('orders')
@@ -46,12 +46,15 @@ export function CurrentBillModal({
         // Filter out legacy service request orders and orders that are already paid
         const validOrders = data.filter((order) => {
           const isLegacy = order.special_instructions?.toLowerCase().startsWith('request:')
-          const isPaid = order.invoices?.some((inv: any) => inv.payment_status === 'paid')
+          // const isPaid = order.invoices?.some((inv: any) => inv.payment_status === 'paid')
+          const isPaid = order.invoices?.some(
+            (inv: { payment_status: string }) => inv.payment_status === 'paid'
+          )
           return !isLegacy && !isPaid
         })
         setOrders(validOrders as OrderWithItems[])
       }
-      
+
       setLoading(false)
     }
 
@@ -79,7 +82,7 @@ export function CurrentBillModal({
         {loading ? (
           <p className="text-sm text-gray-500">Calculating your bill...</p>
         ) : allItems.length === 0 ? (
-          <p className="text-sm text-gray-500">You haven't ordered anything yet.</p>
+          <p className="text-sm text-gray-500">You haven&apos;t ordered anything yet.</p>
         ) : (
           <>
             <div className="max-h-60 overflow-y-auto pr-2 space-y-2">
@@ -111,7 +114,7 @@ export function CurrentBillModal({
                 <span>{formatCurrency(grandTotal, currency)}</span>
               </div>
             </div>
-            
+
             <p className="text-center text-xs text-gray-400 mt-2">
               A waiter will be with you shortly to collect payment.
             </p>

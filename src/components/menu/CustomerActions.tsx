@@ -34,8 +34,10 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
     return (data || []).some((order) => {
       const items = Array.isArray(order.items) ? order.items : []
       const isLegacy = order.special_instructions?.toLowerCase().startsWith('request:')
-      const isPaid = order.invoices?.some((inv: any) => inv.payment_status === 'paid')
-      
+      // const isPaid = order.invoices?.some((inv: any) => inv.payment_status === 'paid')
+      const isPaid = order.invoices?.some(
+        (inv: { payment_status: string }) => inv.payment_status === 'paid'
+      )
       return items.length > 0 && !isLegacy && !isPaid
     })
   }
@@ -71,9 +73,9 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
       .select('id')
       .maybeSingle()
 
-    const specialInstructions = 
-      type === 'water' ? 'REQUEST: Water' : 
-      type === 'waiter' ? 'REQUEST: Waiter' : 'REQUEST: Bill';
+    const specialInstructions =
+      type === 'water' ? 'REQUEST: Water' :
+        type === 'waiter' ? 'REQUEST: Waiter' : 'REQUEST: Bill';
 
     const { data: legacyOrder, error } = await supabase.from('orders').insert({
       restaurant_id: restaurantId,
@@ -83,7 +85,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
       special_instructions: specialInstructions,
       customer_session_id: customerSessionId,
     }).select('id').maybeSingle()
-  
+
     if (serviceRequest.data?.id && legacyOrder?.id) {
       await supabase
         .from('service_requests')
@@ -96,7 +98,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
     if (!error || serviceRequest.data) {
       setConfirmed(type)
       setTimeout(() => setConfirmed(null), 3000)
-      
+
       if (type === "water") toast.success(MESSAGES.serviceRequest.waterSent);
       else if (type === "waiter") toast.success(MESSAGES.serviceRequest.waiterSent);
       else toast.success(MESSAGES.serviceRequest.billSent);
