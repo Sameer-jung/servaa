@@ -36,7 +36,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     if (!table) return;
 
     const key = `servaa:customer-session:${table.id}`;
-    const existing = localStorage.getItem(key);
+    const existing = sessionStorage.getItem(key);
 
     if (existing) {
       setCustomerSessionId(existing);
@@ -44,7 +44,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     }
 
     const nextSessionId = crypto.randomUUID();
-    localStorage.setItem(key, nextSessionId);
+    sessionStorage.setItem(key, nextSessionId);
     setCustomerSessionId(nextSessionId);
   }, [table]);
 

@@ -108,7 +108,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
         .rpc('get_dashboard_stats', { p_restaurant_id: restaurantId }),
       supabase
         .from('orders')
-        .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price)), invoices(payment_method)')
+        .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
         .eq('restaurant_id', restaurantId)
         .order('created_at', { ascending: false })
         .range(from, to),
@@ -184,7 +184,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
 
     const { data } = await supabase
       .from('orders')
-      .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price)), invoices(payment_method)')
+      .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
       .eq('restaurant_id', restaurantId)
       .eq('table_id', table.tableId)
       .order('created_at', { ascending: false })
@@ -324,16 +324,9 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                         Placed {formatDate(order.created_at)}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 text-right">
-                      <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        {formatCurrency(order.total_amount || 0, currency)}
-                      </p>
-                      {order.invoices?.[0]?.payment_method && (
-                        <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {order.invoices[0].payment_method === 'cash' ? '💵 Cash' : order.invoices[0].payment_method === 'online' ? '📱 Online' : order.invoices[0].payment_method}
-                        </p>
-                      )}
-                    </div>
+                    <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
+                      {formatCurrency(order.total_amount || 0, currency)}
+                    </p>
                   </div>
 
                   {order.items?.length > 0 ? (

@@ -27,9 +27,7 @@
     serviceRequest: {
         waterSent: 'Water request sent.',
         billSent: 'Bill request sent.',
-        waiterSent: 'Waiter request sent.',
         sendFailed: 'Unable to send request. Please try again.',
-        cooldownActive: 'Please wait before sending another request.',
     },
 
     tables: {
