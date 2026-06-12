@@ -257,7 +257,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { invoiceId, payment_status } = await request.json()
+    const { invoiceId, payment_status, payment_method } = await request.json()
 
     const cleanPaymentStatus = validatePaymentStatus(payment_status)
 
@@ -293,6 +293,7 @@ export async function PATCH(request: Request) {
 
     const updates = {
       payment_status: cleanPaymentStatus,
+      payment_method: payment_method || null,
       paid_at: cleanPaymentStatus === 'paid' ? new Date().toISOString() : null,
     }
 
@@ -317,6 +318,7 @@ export async function PATCH(request: Request) {
         entityId: invoiceId,
         metadata: {
           payment_status: cleanPaymentStatus,
+          payment_method: payment_method || null,
         },
       })
     }

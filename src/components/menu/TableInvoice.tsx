@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Invoice } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency } from '@/utils/format'
+import { createClient } from '@/lib/supabase/client'
 
 interface TableInvoiceProps {
   tableId: string
@@ -89,8 +90,24 @@ export function TableInvoice({ tableId, tableToken, currency }: TableInvoiceProp
   useEffect(() => {
     fetchInvoice()
     const interval = window.setInterval(fetchInvoice, 5000)
-    return () => window.clearInterval(interval)
-  }, [fetchInvoice])
+    
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`table-invoice:${tableId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
+        () => {
+          fetchInvoice()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      window.clearInterval(interval)
+      supabase.removeChannel(channel)
+    }
+  }, [fetchInvoice, tableId])
 
   if (!invoice) return null
 

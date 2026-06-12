@@ -10,6 +10,7 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { InvoiceDetail } from '@/components/billing/InvoiceDetail'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { useDebouncedRealtimeRefresh } from '@/hooks/useRealtime'
 import { Invoice } from '@/types'
@@ -58,13 +59,17 @@ interface BillingTableGroupProps {
   group: TableInvoiceGroup;
   onView: (invoice: Invoice) => void;
   onMarkPaid?: (invoiceId: string) => void;
+  onMarkAllPaid?: (invoiceIds: string[]) => void;
   onSendToTable: (invoiceId: string) => void;
   currency?: string;
   isSending?: (invoiceId: string) => boolean;
   isMarkingPaid?: (invoiceId: string) => boolean;
 }
 
-function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency, isSending, isMarkingPaid  }: BillingTableGroupProps) {
+function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToTable, currency, isSending, isMarkingPaid  }: BillingTableGroupProps) {
+  const isUnpaid = group.invoices.some(i => i.payment_status === 'unpaid');
+  const unpaidInvoiceIds = group.invoices.filter(i => i.payment_status === 'unpaid').map(i => i.id);
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-3">
@@ -74,9 +79,16 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency,
             {group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'} - latest {formatDate(group.latestCreatedAt)}
           </p>
         </div>
-        <p className="flex-shrink-0 text-lg font-bold text-gray-900 dark:text-gray-100">
-          {formatCurrency(group.total, currency)}
-        </p>
+        <div className="flex flex-col items-end gap-2">
+          <p className="flex-shrink-0 text-lg font-bold text-gray-900 dark:text-gray-100">
+            {formatCurrency(group.total, currency)}
+          </p>
+          {isUnpaid && onMarkAllPaid && (
+            <Button size="sm" variant="outline" onClick={() => onMarkAllPaid(unpaidInvoiceIds)}>
+              Mark All Paid
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
@@ -86,7 +98,10 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency,
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">#{invoice.invoice_number}</span>
-                  <Badge status={invoice.payment_status}>{invoice.payment_status}</Badge>
+                  <Badge status={invoice.payment_status}>
+                    {invoice.payment_status}
+                    {invoice.payment_method ? ` (${invoice.payment_method})` : ''}
+                  </Badge>
                 </div>
                 <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{formatDate(invoice.created_at)}</p>
               </div>
@@ -103,7 +118,7 @@ function BillingTableGroup({ group, onView, onMarkPaid, onSendToTable, currency,
                 Send to Table
               </Button>
               {invoice.payment_status === 'unpaid' && onMarkPaid && (
-                <Button size="sm" className="flex-1"    isLoading={Boolean(isMarkingPaid?.(invoice.id))} disabled={Boolean(isSending?.(invoice.id))} onClick={() => onMarkPaid(invoice.id)}>
+                <Button size="sm" className="flex-1" isLoading={Boolean(isMarkingPaid?.(invoice.id))} disabled={Boolean(isSending?.(invoice.id))} onClick={() => onMarkPaid(invoice.id)}>
                   Mark Paid
                 </Button>
               )}
@@ -128,6 +143,8 @@ function BillingContent() {
   const [message, setMessage] = useState('')
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [markingPaidInvoiceId, setMarkingPaidInvoiceId] = useState<string | null>(null)
+  const [paymentModalInfo, setPaymentModalInfo] = useState<{ invoiceIds: string[] } | null>(null)
+  
   const realtimeHealthyRef = useRef(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
@@ -205,22 +222,26 @@ function BillingContent() {
     }
   }, [fetchData, refreshSoon, restaurant, supabase])
 
-  const handleMarkPaid = async (invoiceId: string) => {
-      if (markingPaidInvoiceId || sendingInvoiceId) return;
-      setMarkingPaidInvoiceId(invoiceId);
-  try {
-      await fetch('/api/invoices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoiceId, payment_status: 'paid' }),
-      })
+  const handleConfirmPayment = async (method: string) => {
+    if (!paymentModalInfo) return;
+    const { invoiceIds } = paymentModalInfo;
+    setMarkingPaidInvoiceId('multiple');
+    
+    try {
+      await Promise.all(invoiceIds.map(invoiceId => 
+        fetch('/api/invoices', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId, payment_status: 'paid', payment_method: method }),
+        })
+      ))
       await fetchData();
       setShowDetail(false);
+      setPaymentModalInfo(null);
       toast.success(MESSAGES.billing.markPaidSuccess);
-  } finally {
-    setMarkingPaidInvoiceId(null);
-  }
-
+    } finally {
+      setMarkingPaidInvoiceId(null);
+    }
   }
 
   const handleSendToTable = async (invoiceId: string) => {
@@ -285,12 +306,13 @@ function BillingContent() {
                   setSelectedInvoice(invoice);
                   setShowDetail(true);
                 }}
-                onMarkPaid={handleMarkPaid}
+                onMarkPaid={(invoiceId) => setPaymentModalInfo({ invoiceIds: [invoiceId] })}
+                onMarkAllPaid={(invoiceIds) => setPaymentModalInfo({ invoiceIds })}
                 onSendToTable={handleSendToTable}
                 currency={restaurant?.currency}
                 isSending={(invoiceId) => sendingInvoiceId === invoiceId}
                 isMarkingPaid={(invoiceId) =>
-                  markingPaidInvoiceId === invoiceId
+                  markingPaidInvoiceId === invoiceId || markingPaidInvoiceId === 'multiple'
                 }
               />
             ))}
@@ -381,7 +403,7 @@ function BillingContent() {
         onClose={() => setShowDetail(false)}
         onMarkPaid={
           selectedInvoice?.payment_status === "unpaid"
-            ? () => handleMarkPaid(selectedInvoice.id)
+            ? () => setPaymentModalInfo({ invoiceIds: [selectedInvoice.id] })
             : undefined
         }
         onSendToTable={
@@ -393,6 +415,20 @@ function BillingContent() {
         sendingInvoiceId={sendingInvoiceId}
         markingPaidInvoiceId={markingPaidInvoiceId} 
       />
+
+      <Modal isOpen={Boolean(paymentModalInfo)} onClose={() => setPaymentModalInfo(null)} title="Select Payment Method">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">How did the customer pay?</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="outline" onClick={() => handleConfirmPayment('Cash')} isLoading={Boolean(markingPaidInvoiceId)}>
+              Cash
+            </Button>
+            <Button variant="outline" onClick={() => handleConfirmPayment('Online')} isLoading={Boolean(markingPaidInvoiceId)}>
+              Online
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

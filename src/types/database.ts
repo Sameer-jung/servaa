@@ -381,5 +381,5 @@ export interface Database {
 export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'
 export type StaffRole = 'owner' | 'staff'
-export type ServiceRequestType = 'water' | 'bill'
+export type ServiceRequestType = 'water' | 'bill' | 'waiter'
 export type ServiceRequestStatus = 'pending' | 'acknowledged' | 'completed' | 'cancelled'

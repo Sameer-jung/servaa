@@ -14,6 +14,7 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
+import { isServiceRequestOrder } from '@/utils/orders'
 import { MenuCategory, MenuItem, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
 import { writeAuditLog } from '@/utils/audit'
 
@@ -657,8 +658,18 @@ function OrdersContent() {
   const handleAccept = async (orderId: string) => {
     if(updatingOrderId) return
     setUpdatingOrderId(orderId)
-    applyOptimisticStatus(orderId, 'accepted')
-    const { error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId)
+
+    const order = orders.find(o => o.id === orderId)
+    const isServiceReq = order ? isServiceRequestOrder(order) : false;
+    const newStatus: OrderStatus = isServiceReq ? 'completed' : 'accepted'
+
+    applyOptimisticStatus(orderId, newStatus)
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
+    
+    if (isServiceReq) {
+      await supabase.from('service_requests').update({ status: 'completed' }).eq('legacy_order_id', orderId)
+    }
+
     if (error) fetchOrders()
     if (!error && restaurant) {
       void writeAuditLog(supabase, {
@@ -666,9 +677,9 @@ function OrdersContent() {
         action: 'order.status_changed',
         entityType: 'order',
         entityId: orderId,
-        metadata: { status: 'accepted' },
+        metadata: { status: newStatus },
       })
-      toast.success(MESSAGES.staffOrder.accepted);
+      toast.success(isServiceReq ? 'Request completed' : MESSAGES.staffOrder.accepted);
     }
     setUpdatingOrderId(null)
   }
