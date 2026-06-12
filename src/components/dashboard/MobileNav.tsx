@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/utils/cn'
 import { MobileProfile } from './MobileProfile'
+import Image from 'next/image'
 
 const navItems = [
   { href: '/dashboard', label: 'Overview' },
@@ -22,13 +23,25 @@ export function MobileNav() {
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:hidden dark:border-gray-800 dark:bg-gray-900">
-        <Link
-          href="/dashboard"
-          className="text-lg font-bold text-brand-600"
-          onClick={() => setIsOpen(false)}
-        >
-          Servaa
-        </Link>
+                <Link href="/dashboard" className="flex items-center gap-3">
+                  <Image
+                    src="/logo/servaa.png"
+                    alt="Servaa"
+                    width={40}
+                    height={40}
+                    priority
+                    className="h-10 w-10 rounded-lg object-contain"
+                  />
+        
+                  <Image
+                    src="/logo/servaa_logo.png"
+                    alt="Servaa"
+                    width={112}
+                    height={32}
+                    priority
+                    className="h-8 w-auto object-contain"
+                  />
+                </Link>
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-700 active:bg-gray-100 dark:text-gray-200 dark:active:bg-gray-800"
