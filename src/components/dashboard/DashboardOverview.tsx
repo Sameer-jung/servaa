@@ -108,7 +108,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
         .rpc('get_dashboard_stats', { p_restaurant_id: restaurantId }),
       supabase
         .from('orders')
-        .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
+        .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price)), invoices(payment_status, payment_method)')
         .eq('restaurant_id', restaurantId)
         .order('created_at', { ascending: false })
         .range(from, to),
@@ -184,7 +184,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
 
     const { data } = await supabase
       .from('orders')
-      .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price))')
+      .select('*, table:tables(table_number), items:order_items(*, menu_item:menu_items(name, price)), invoices(payment_status, payment_method)')
       .eq('restaurant_id', restaurantId)
       .eq('table_id', table.tableId)
       .order('created_at', { ascending: false })
@@ -323,6 +323,21 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                       <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
                         Placed {formatDate(order.created_at)}
                       </p>
+                      {(() => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const orderAny = order as any;
+                        const orderInvoices = Array.isArray(orderAny.invoices) ? orderAny.invoices : (orderAny.invoices ? [orderAny.invoices] : []);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const paidInvoice = orderInvoices.find((inv: any) => inv.payment_status === 'paid');
+                        if (paidInvoice?.payment_method) {
+                          return (
+                            <p className="mt-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+                              Payment Method: <span className="font-semibold">{paidInvoice.payment_method}</span>
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                     <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
                       {formatCurrency(order.total_amount || 0, currency)}

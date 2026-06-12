@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
@@ -74,6 +75,7 @@ function playAlertSound() {
 export function OrderNotifications() {
   const { restaurant } = useRestaurant()
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     if (!restaurant) return
@@ -116,7 +118,14 @@ export function OrderNotifications() {
 
           toast.custom(
             (t) => (
-              <div className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+              <div 
+                className="w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-800 dark:bg-gray-900 cursor-pointer hover:border-brand-300 transition-colors"
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('button')) return;
+                  toast.dismiss(t.id);
+                  router.push('/dashboard/orders');
+                }}
+              >
                 <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</p>
@@ -176,7 +185,7 @@ export function OrderNotifications() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [restaurant, supabase])
+  }, [restaurant, router, supabase])
 
   return null
 }
