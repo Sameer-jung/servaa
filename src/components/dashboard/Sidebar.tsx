@@ -101,8 +101,7 @@ export function DashboardSidebar() {
   ];
 
   // MOVE footerItems here so customer menu can use restaurant.slug
-  const footerItems: NavItem[] = [
-    { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  const footerItems: NavItem[] = [  
     { href: "#", label: "Support", icon: LifeBuoy, badge: "Online" },
     {
       href: restaurant?.slug ? `/menu/${restaurant.slug}` : "#",
