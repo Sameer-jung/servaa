@@ -26,6 +26,53 @@ type TableInvoiceGroup = {
   latestCreatedAt: string
 }
 
+type DayGroup = {
+  label: string
+  dateKey: string
+  invoices: Invoice[]
+  subtotal: number
+}
+
+function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
+  const now = new Date()
+  const todayKey = now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayKey = yesterday.toDateString()
+
+  const map = new Map<string, DayGroup>()
+
+  for (const invoice of invoices) {
+    const date = new Date(invoice.created_at)
+    const key = date.toDateString()
+    let label: string
+    if (key === todayKey) {
+      label = 'Today'
+    } else if (key === yesterdayKey) {
+      label = 'Yesterday'
+    } else {
+      label = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+    }
+    const existing = map.get(key)
+    if (existing) {
+      existing.invoices.push(invoice)
+      existing.subtotal += Number(invoice.grand_total || 0)
+    } else {
+      map.set(key, { label, dateKey: key, invoices: [invoice], subtotal: Number(invoice.grand_total || 0) })
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.invoices[0].created_at).getTime() - new Date(a.invoices[0].created_at).getTime()
+  )
+}
+
+function getItemsSummary(invoice: Invoice): string {
+  const items = invoice.order?.items
+  if (!items || items.length === 0) return '—'
+  return items.map(item => `${item.quantity}× ${item.menu_item?.name || 'Item'}`).join(', ')
+}
+
 function groupInvoicesByTable(invoices: Invoice[]): TableInvoiceGroup[] {
   const groups = new Map<string, TableInvoiceGroup>()
 
@@ -194,7 +241,8 @@ function TableCard({
 }
 
 function BillingContent() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'paid'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'paid' | 'payments'>('overview')
+  const [paymentSubTab, setPaymentSubTab] = useState<'Online' | 'Cash'>('Online')
   const [tables, setTables] = useState<Table[]>([])
   const [activeOrders, setActiveOrders] = useState<OrderWithItems[]>([])
   const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([])
@@ -418,6 +466,12 @@ function BillingContent() {
           >
             Paid / Completed
           </button>
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${activeTab === 'payments' ? 'bg-white shadow-sm text-gray-900 dark:bg-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+          >
+            Payments
+          </button>
         </div>
       </div>
 
@@ -528,6 +582,90 @@ function BillingContent() {
               description="Paid invoices will appear here."
             />
           )}
+        </div>
+      )}
+
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          <div className="flex bg-gray-200 p-0.5 rounded-lg dark:bg-gray-700 self-start">
+            <button
+              onClick={() => setPaymentSubTab('Online')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${paymentSubTab === 'Online' ? 'bg-white shadow-sm text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+            >
+              Online Payment
+            </button>
+            <button
+              onClick={() => setPaymentSubTab('Cash')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${paymentSubTab === 'Cash' ? 'bg-white shadow-sm text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+            >
+              Cash Payment
+            </button>
+          </div>
+
+          {(() => {
+            const filtered = paidInvoices.filter(inv => inv.payment_method === paymentSubTab)
+            const dayGroups = groupInvoicesByDay(filtered)
+
+            if (dayGroups.length === 0) {
+              return (
+                <EmptyState
+                  title={paymentSubTab === 'Online' ? 'No online payments yet' : 'No cash payments yet'}
+                  description={`${paymentSubTab} payments will appear here once invoices are marked paid.`}
+                />
+              )
+            }
+
+            return (
+              <div className="space-y-6">
+                {dayGroups.map(group => (
+                  <div key={group.dateKey}>
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {group.label}
+                    </h3>
+                    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {group.invoices.map(invoice => (
+                          <div key={invoice.id} className="flex items-start gap-3 p-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                  Table {invoice.order?.table?.table_number || '—'}
+                                </span>
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  paymentSubTab === 'Online'
+                                    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
+                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                }`}>
+                                  {paymentSubTab}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {getItemsSummary(invoice)}
+                              </p>
+                              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                                {formatDate(invoice.created_at)}
+                              </p>
+                            </div>
+                            <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
+                              {formatCurrency(invoice.grand_total, restaurant?.currency)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          {group.invoices.length} {group.invoices.length === 1 ? 'payment' : 'payments'}
+                        </span>
+                        <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          {formatCurrency(group.subtotal, restaurant?.currency)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
 
