@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { useDebouncedRealtimeRefresh } from '@/hooks/useRealtime'
-import { Invoice } from '@/types'
+import { Invoice, OrderWithItems, Table } from '@/types'
+import { hasBillableItems } from '@/utils/orders'
 
 const pageSize = 20
 
@@ -66,7 +67,7 @@ interface BillingTableGroupProps {
   isMarkingPaid?: (invoiceId: string) => boolean;
 }
 
-function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToTable, currency, isSending, isMarkingPaid  }: BillingTableGroupProps) {
+function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToTable, currency, isSending, isMarkingPaid }: BillingTableGroupProps) {
   const isUnpaid = group.invoices.some(i => i.payment_status === 'unpaid');
   const unpaidInvoiceIds = group.invoices.filter(i => i.payment_status === 'unpaid').map(i => i.id);
 
@@ -130,12 +131,76 @@ function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToT
   )
 }
 
+function TableCard({
+  table,
+  isActive,
+  outstandingAmount,
+  openItemsCount,
+  onClick,
+  currency
+}: {
+  table: Table | { id: string, table_number: string };
+  isActive: boolean;
+  outstandingAmount: number;
+  openItemsCount: number;
+  onClick: () => void;
+  currency?: string;
+}) {
+  if (isActive) {
+    return (
+      <button
+        onClick={onClick}
+        className="text-left w-full rounded-xl bg-brand-600 p-4 shadow-sm transition-transform hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-white">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            <span className="font-semibold text-lg">Table {table.table_number}</span>
+          </div>
+          <span className="rounded-full bg-brand-500 px-2.5 py-0.5 text-xs font-semibold text-white">Active</span>
+        </div>
+        <hr className="border-brand-500/50 my-3" />
+        <div>
+          <p className="text-xl font-bold text-white">{formatCurrency(outstandingAmount, currency)} Outstanding</p>
+          <p className="text-sm text-brand-100 font-medium mt-0.5">{openItemsCount} {openItemsCount === 1 ? 'Open Item' : 'Open Items'}</p>
+        </div>
+      </button>
+    )
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className="text-left w-full rounded-xl border-2 border-brand-500 bg-white p-4 shadow-sm transition-transform hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between min-h-[140px] dark:bg-gray-900"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
+          <svg className="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+          <span className="font-semibold text-lg">Table {table.table_number}</span>
+        </div>
+        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Inactive</span>
+      </div>
+      <hr className="border-gray-100 my-3 dark:border-gray-800" />
+      <div>
+        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Inactive</p>
+        <p className="text-xs text-gray-500 font-medium mt-0.5 dark:text-gray-400">No Active Bills</p>
+      </div>
+    </button>
+  )
+}
+
 function BillingContent() {
+  const [activeTab, setActiveTab] = useState<'overview' | 'paid'>('overview')
+  const [tables, setTables] = useState<Table[]>([])
+  const [activeOrders, setActiveOrders] = useState<OrderWithItems[]>([])
   const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([])
   const [paidInvoices, setPaidInvoices] = useState<Invoice[]>([])
-  const [unpaidPage, setUnpaidPage] = useState(0)
+  const [unpaidPage] = useState(0)
   const [paidPage, setPaidPage] = useState(0)
-  const [hasNextUnpaidPage, setHasNextUnpaidPage] = useState(false)
   const [hasNextPaidPage, setHasNextPaidPage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
@@ -145,6 +210,8 @@ function BillingContent() {
   const [markingPaidInvoiceId, setMarkingPaidInvoiceId] = useState<string | null>(null)
   const [paymentModalInfo, setPaymentModalInfo] = useState<{ invoiceIds: string[] } | null>(null)
   
+  const [selectedTableGroupId, setSelectedTableGroupId] = useState<string | null>(null)
+
   const realtimeHealthyRef = useRef(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
@@ -153,14 +220,18 @@ function BillingContent() {
     if (!restaurant) {
       setUnpaidInvoices([])
       setPaidInvoices([])
+      setTables([])
+      setActiveOrders([])
       setLoading(false)
       return
     }
 
     setLoading(true)
-    const [unpaidResponse, paidResponse] = await Promise.all([
+    const [unpaidResponse, paidResponse, tablesResult, ordersResult] = await Promise.all([
       fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=unpaid&page=${unpaidPage}&pageSize=${pageSize}`),
       fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=paid&page=${paidPage}&pageSize=${pageSize}`),
+      supabase.from('tables').select('*').eq('restaurant_id', restaurant.id).order('table_number'),
+      supabase.from('orders').select('*, items:order_items(*)').eq('restaurant_id', restaurant.id).in('status', ['pending', 'accepted', 'preparing', 'ready'])
     ])
 
     const unpaidResult = await unpaidResponse.json().catch(() => null)
@@ -171,6 +242,8 @@ function BillingContent() {
       toast.error(MESSAGES.billing.loadFailed)
       setUnpaidInvoices([])
       setPaidInvoices([])
+      setTables([])
+      setActiveOrders([])
       setLoading(false)
       return
     }
@@ -180,10 +253,12 @@ function BillingContent() {
 
     setUnpaidInvoices(nextUnpaidInvoices)
     setPaidInvoices(nextPaidInvoices)
-    setHasNextUnpaidPage(nextUnpaidInvoices.length === pageSize)
+    setTables(tablesResult.data || [])
+    setActiveOrders((ordersResult.data as OrderWithItems[]) || [])
+    
     setHasNextPaidPage(nextPaidInvoices.length === pageSize)
     setLoading(false)
-  }, [paidPage, restaurant, unpaidPage])
+  }, [paidPage, restaurant, unpaidPage, supabase])
 
   useEffect(() => {
     fetchData()
@@ -250,26 +325,24 @@ function BillingContent() {
     setSendingInvoiceId(invoiceId)
 
     try {
-          const response = await fetch("/api/invoices/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ invoiceId }),
-          });
-            const result = await response.json().catch(() => null);
+      const response = await fetch("/api/invoices/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId }),
+      });
+      const result = await response.json().catch(() => null);
 
-            if (!response.ok) {
-              setMessage(result?.error || "Failed to send invoice");
-              toast.error(MESSAGES.billing.sendFailed);
-              return;
-            }
-            setMessage("Invoice sent to table");
-            toast.success(MESSAGES.billing.invoiceSentToTable);
-            await fetchData();
+      if (!response.ok) {
+        setMessage(result?.error || "Failed to send invoice");
+        toast.error(MESSAGES.billing.sendFailed);
+        return;
+      }
+      setMessage("Invoice sent to table");
+      toast.success(MESSAGES.billing.invoiceSentToTable);
+      await fetchData();
     } finally {
       setSendingInvoiceId(null);
     }
-
-
   }
 
   const unpaidInvoiceGroups = groupInvoicesByTable(unpaidInvoices)
@@ -279,11 +352,73 @@ function BillingContent() {
     return <PageLoading />
   }
 
+  // Calculate table cards
+  const allTables = [...tables]
+  unpaidInvoiceGroups.forEach(group => {
+    if (!allTables.find(t => t.id === group.tableId)) {
+      allTables.push({ id: group.tableId, table_number: group.tableNumber } as Table)
+    }
+  })
+  
+  activeOrders.forEach(order => {
+    if (!allTables.find(t => t.id === order.table_id)) {
+      allTables.push({ id: order.table_id, table_number: order.table?.table_number || 'Unknown' } as Table)
+    }
+  })
+
+  // To avoid duplicate rendering due to duplicate pushes, deduplicate:
+  const uniqueTables = Array.from(new Map(allTables.map(item => [item.id, item])).values())
+
+  const activeCards: { table: Table | { id: string; table_number: string }; isActive: boolean; outstandingAmount: number; openItemsCount: number; group: TableInvoiceGroup | undefined }[] = []
+  const inactiveCards: { table: Table | { id: string; table_number: string }; isActive: boolean; outstandingAmount: number; openItemsCount: number; group: TableInvoiceGroup | undefined }[] = []
+
+  uniqueTables.forEach(table => {
+    const group = unpaidInvoiceGroups.find(g => g.tableId === table.id)
+    const tOrders = activeOrders.filter(o => o.table_id === table.id && hasBillableItems(o))
+    
+    const hasUnpaidInvoices = !!group
+    const hasActiveOrders = tOrders.length > 0
+    const isActive = hasUnpaidInvoices || hasActiveOrders
+    
+    // As per user instruction: Use invoice totals only.
+    const outstandingAmount = group?.total || 0
+    
+    const openItemsCount = (group?.invoices.reduce((acc, inv) => acc + (inv.order?.items?.length || 0), 0) || 0) + 
+                           tOrders.reduce((acc, o) => acc + (o.items?.length || 0), 0)
+                           
+    const cardData = {
+      table,
+      isActive,
+      outstandingAmount,
+      openItemsCount,
+      group
+    }
+    
+    if (isActive) activeCards.push(cardData)
+    else inactiveCards.push(cardData)
+  })
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Billing</h1>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage invoices and payments</p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Billing Overview</h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage invoices and active tables</p>
+        </div>
+        <div className="flex bg-gray-100 p-1 rounded-lg dark:bg-gray-800 self-start sm:self-auto">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${activeTab === 'overview' ? 'bg-white shadow-sm text-gray-900 dark:bg-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+          >
+            Table Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('paid')}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${activeTab === 'paid' ? 'bg-white shadow-sm text-gray-900 dark:bg-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+          >
+            Paid / Completed
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -292,110 +427,140 @@ function BillingContent() {
         </div>
       )}
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Unpaid Invoices
-        </h2>
-        {unpaidInvoiceGroups.length > 0 ? (
-          <div className="space-y-3">
-            {unpaidInvoiceGroups.map((group) => (
-              <BillingTableGroup
-                key={group.tableId}
-                group={group}
-                onView={(invoice) => {
-                  setSelectedInvoice(invoice);
-                  setShowDetail(true);
-                }}
-                onMarkPaid={(invoiceId) => setPaymentModalInfo({ invoiceIds: [invoiceId] })}
-                onMarkAllPaid={(invoiceIds) => setPaymentModalInfo({ invoiceIds })}
-                onSendToTable={handleSendToTable}
-                currency={restaurant?.currency}
-                isSending={(invoiceId) => sendingInvoiceId === invoiceId}
-                isMarkingPaid={(invoiceId) =>
-                  markingPaidInvoiceId === invoiceId || markingPaidInvoiceId === 'multiple'
-                }
-              />
-            ))}
-            <div className="flex items-center justify-between gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={unpaidPage === 0}
-                onClick={() => setUnpaidPage((page) => Math.max(0, page - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Page {unpaidPage + 1}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!hasNextUnpaidPage}
-                onClick={() => setUnpaidPage((page) => page + 1)}
-              >
-                Next
-              </Button>
-            </div>
+      {activeTab === 'overview' && (
+        <div className="space-y-8">
+          <div>
+            <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Active Tables
+            </h2>
+            {activeCards.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {activeCards.map(({ table, isActive, outstandingAmount, openItemsCount }) => (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    isActive={isActive}
+                    outstandingAmount={outstandingAmount}
+                    openItemsCount={openItemsCount}
+                    onClick={() => setSelectedTableGroupId(table.id)}
+                    currency={restaurant?.currency}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No active tables" description="All caught up!" />
+            )}
           </div>
-        ) : (
-          <EmptyState title="No unpaid invoices" description="All caught up!" />
-        )}
-      </div>
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Paid / Completed Invoices
-        </h2>
-        {paidInvoiceGroups.length > 0 ? (
-          <div className="space-y-3">
-            {paidInvoiceGroups.map((group) => (
-              <BillingTableGroup
-                key={group.tableId}
-                group={group}
-                onView={(invoice) => {
-                  setSelectedInvoice(invoice);
-                  setShowDetail(true);
-                }}
-                onSendToTable={handleSendToTable}
-                currency={restaurant?.currency}
-                isSending={(invoiceId) => sendingInvoiceId === invoiceId}
-                isMarkingPaid={(invoiceId) =>
-                  markingPaidInvoiceId === invoiceId
-                }
-              />
-            ))}
-            <div className="flex items-center justify-between gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={paidPage === 0}
-                onClick={() => setPaidPage((page) => Math.max(0, page - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {paidPage + 1}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!hasNextPaidPage}
-                onClick={() => setPaidPage((page) => page + 1)}
-              >
-                Next
-              </Button>
-            </div>
+          <div>
+            <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Inactive Tables
+            </h2>
+            {inactiveCards.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 opacity-80">
+                {inactiveCards.map(({ table, isActive, outstandingAmount, openItemsCount }) => (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    isActive={isActive}
+                    outstandingAmount={outstandingAmount}
+                    openItemsCount={openItemsCount}
+                    onClick={() => {}}
+                    currency={restaurant?.currency}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No inactive tables" description="All tables are currently active." />
+            )}
           </div>
-        ) : (
-          <EmptyState
-            title="No paid invoices"
-            description="Paid invoices will appear here."
-          />
-        )}
-      </div>
+        </div>
+      )}
+
+      {activeTab === 'paid' && (
+        <div>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Paid / Completed Invoices
+          </h2>
+          {paidInvoiceGroups.length > 0 ? (
+            <div className="space-y-3">
+              {paidInvoiceGroups.map((group) => (
+                <BillingTableGroup
+                  key={group.tableId}
+                  group={group}
+                  onView={(invoice) => {
+                    setSelectedInvoice(invoice);
+                    setShowDetail(true);
+                  }}
+                  onSendToTable={handleSendToTable}
+                  currency={restaurant?.currency}
+                  isSending={(invoiceId) => sendingInvoiceId === invoiceId}
+                  isMarkingPaid={(invoiceId) =>
+                    markingPaidInvoiceId === invoiceId
+                  }
+                />
+              ))}
+              <div className="flex items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={paidPage === 0}
+                  onClick={() => setPaidPage((page) => Math.max(0, page - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {paidPage + 1}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasNextPaidPage}
+                  onClick={() => setPaidPage((page) => page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              title="No paid invoices"
+              description="Paid invoices will appear here."
+            />
+          )}
+        </div>
+      )}
+
+      <Modal isOpen={Boolean(selectedTableGroupId)} onClose={() => setSelectedTableGroupId(null)} title={`Table ${selectedTableGroupId ? uniqueTables.find(t => t.id === selectedTableGroupId)?.table_number : ''} Bills`}>
+        {(() => {
+          if (!selectedTableGroupId) return null
+          const group = unpaidInvoiceGroups.find(g => g.tableId === selectedTableGroupId)
+          if (!group) {
+             return (
+               <div className="py-6 text-center">
+                 <p className="text-gray-500 dark:text-gray-400">This table has active orders being prepared, but no invoices have been generated yet.</p>
+               </div>
+             )
+          }
+          return (
+            <BillingTableGroup
+              group={group}
+              onView={(invoice) => {
+                setSelectedInvoice(invoice);
+                setShowDetail(true);
+              }}
+              onMarkPaid={(invoiceId) => setPaymentModalInfo({ invoiceIds: [invoiceId] })}
+              onMarkAllPaid={(invoiceIds) => setPaymentModalInfo({ invoiceIds })}
+              onSendToTable={handleSendToTable}
+              currency={restaurant?.currency}
+              isSending={(invoiceId) => sendingInvoiceId === invoiceId}
+              isMarkingPaid={(invoiceId) =>
+                markingPaidInvoiceId === invoiceId || markingPaidInvoiceId === 'multiple'
+              }
+            />
+          )
+        })()}
+      </Modal>
 
       <InvoiceDetail
         invoice={selectedInvoice}

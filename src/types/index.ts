@@ -45,6 +45,22 @@ export interface MenuCategory {
   created_at: string
 }
 
+export interface Modifier {
+  id: string
+  name: string
+  price: number
+  group_is_required?: boolean
+  group_is_multiselect?: boolean
+}
+
+export interface ModifierGroup {
+  id: string
+  name: string
+  is_required: boolean
+  is_multiselect: boolean
+  modifiers?: Modifier[]
+}
+
 export interface MenuItem {
   id: string
   restaurant_id: string
@@ -57,6 +73,7 @@ export interface MenuItem {
   sort_order: number
   created_at: string
   category?: MenuCategory
+  modifier_groups?: ModifierGroup[]
 }
 
 export interface MenuCategoryWithItems extends MenuCategory {
