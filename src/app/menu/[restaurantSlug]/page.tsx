@@ -76,7 +76,7 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
         .order('sort_order'),
       supabase
         .from('menu_items')
-        .select('*')
+        .select('*, modifier_groups(*, modifiers(*))')
         .eq('restaurant_id', restaurant.id)
         .order('sort_order'),
     ])

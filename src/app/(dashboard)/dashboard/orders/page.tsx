@@ -15,8 +15,15 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
-import { MenuCategory, MenuItem, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
+import { MenuCategory, MenuItem, Modifier, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
 import { writeAuditLog } from '@/utils/audit'
+import { calculateItemTotal } from '@/utils/pricing'
+import {
+  getSelectedModifierRecords,
+  isModifierSelectionValid,
+  updateModifierSelection,
+  type ModifierSelections,
+} from '@/utils/modifiers'
 
 const tabs = [
   { id: 'active', label: 'Active' },
@@ -90,8 +97,10 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableOrderGroup[] {
 }
 
 type PosCartItem = {
+  cartItemId: string
   menuItem: MenuItem
   quantity: number
+  modifiers: Modifier[]
 }
 
 interface StaffPosOrderEntryProps {
@@ -108,6 +117,8 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [cartItems, setCartItems] = useState<PosCartItem[]>([])
+  const [customizingItemId, setCustomizingItemId] = useState<string | null>(null)
+  const [modifierSelections, setModifierSelections] = useState<ModifierSelections>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const supabase = createClient()
@@ -129,7 +140,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
         .order('sort_order'),
       supabase
         .from('menu_items')
-        .select('*')
+        .select('*, modifier_groups(*, modifiers(*))')
         .eq('restaurant_id', restaurant.id)
         .eq('available', true)
         .order('sort_order'),
@@ -147,43 +158,70 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
     fetchPosData()
   }, [fetchPosData])
 
-  const addItem = (menuItem: MenuItem) => {
+  const createCartItemId = (menuItem: MenuItem, modifiers: Modifier[]) => {
+    const modifierKey = modifiers.map((modifier) => modifier.id).sort().join(',')
+    return `${menuItem.id}:${modifierKey}`
+  }
+
+  const addItemToCart = (menuItem: MenuItem, modifiers: Modifier[] = []) => {
+    const cartItemId = createCartItemId(menuItem, modifiers)
+
     setCartItems((current) => {
-      const existing = current.find((item) => item.menuItem.id === menuItem.id)
+      const existing = current.find((item) => item.cartItemId === cartItemId)
       if (existing) {
         return current.map((item) =>
-          item.menuItem.id === menuItem.id
+          item.cartItemId === cartItemId
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
       }
 
-      return [...current, { menuItem, quantity: 1 }]
+      return [...current, { cartItemId, menuItem, quantity: 1, modifiers }]
     })
   }
 
-  const updateQuantity = (menuItemId: string, quantity: number) => {
+  const addItem = (menuItem: MenuItem) => {
+    if (menuItem.modifier_groups?.length) {
+      setCustomizingItemId((current) => current === menuItem.id ? null : menuItem.id)
+      setModifierSelections({})
+      return
+    }
+
+    addItemToCart(menuItem)
+  }
+
+  const confirmCustomizedItem = (menuItem: MenuItem) => {
+    if (!isModifierSelectionValid(menuItem, modifierSelections)) return
+
+    addItemToCart(menuItem, getSelectedModifierRecords(menuItem, modifierSelections))
+    setCustomizingItemId(null)
+    setModifierSelections({})
+  }
+
+  const updateQuantity = (cartItemId: string, quantity: number) => {
     setCartItems((current) => {
       if (quantity <= 0) {
-        return current.filter((item) => item.menuItem.id !== menuItemId)
+        return current.filter((item) => item.cartItemId !== cartItemId)
       }
 
       return current.map((item) =>
-        item.menuItem.id === menuItemId ? { ...item, quantity } : item
+        item.cartItemId === cartItemId ? { ...item, quantity } : item
       )
     })
   }
 
-  const removeItem = (menuItemId: string) => {
-    setCartItems((current) => current.filter((item) => item.menuItem.id !== menuItemId))
+  const removeItem = (cartItemId: string) => {
+    setCartItems((current) => current.filter((item) => item.cartItemId !== cartItemId))
   }
 
   const getItemQuantity = (menuItemId: string) => {
-    return cartItems.find((item) => item.menuItem.id === menuItemId)?.quantity || 0
+    return cartItems
+      .filter((item) => item.menuItem.id === menuItemId)
+      .reduce((total, item) => total + item.quantity, 0)
   }
 
   const cartTotal = cartItems.reduce(
-    (total, item) => total + Number(item.menuItem.price || 0) * item.quantity,
+    (total, item) => total + calculateItemTotal(item.menuItem.price, item.modifiers) * item.quantity,
     0
   )
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
@@ -229,6 +267,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
             menuItemId: item.menuItem.id,
             quantity: item.quantity,
             notes: null,
+            modifiers: item.modifiers || [],
           })),
         }),
       })
@@ -339,6 +378,12 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredItems.map((item) => {
                   const quantity = getItemQuantity(item.id)
+                  const baseCartItemId = createCartItemId(item, [])
+                  const hasModifiers = Boolean(item.modifier_groups?.length)
+                  const isCustomizing = customizingItemId === item.id
+                  const customSelectionValid = isModifierSelectionValid(item, modifierSelections)
+                  const selectedModifiers = getSelectedModifierRecords(item, modifierSelections)
+                  const selectedPrice = calculateItemTotal(item.price, selectedModifiers)
 
                   return (
                     <div
@@ -362,11 +407,11 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                       </div>
 
                       <div className="mt-3 flex items-center justify-between gap-2">
-                        {quantity > 0 ? (
+                        {quantity > 0 && !hasModifiers ? (
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => updateQuantity(item.id, quantity - 1)}
+                              onClick={() => updateQuantity(baseCartItemId, quantity - 1)}
                               className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                               aria-label={`Decrease ${item.name}`}
                             >
@@ -377,7 +422,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                             </span>
                             <button
                               type="button"
-                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                              onClick={() => updateQuantity(baseCartItemId, quantity + 1)}
                               className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700"
                               aria-label={`Increase ${item.name}`}
                             >
@@ -387,10 +432,87 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                         ) : (
                           <Button type="button" size="sm" className="gap-2" onClick={() => addItem(item)}>
                             <Plus className="h-4 w-4" />
-                            Add
+                            {hasModifiers ? 'Customize' : 'Add'}
                           </Button>
                         )}
                       </div>
+
+                      {isCustomizing && (
+                        <div className="mt-3 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-800">
+                          {item.modifier_groups?.map((group) => {
+                            const selections = modifierSelections[group.id] || []
+                            const isMissingRequired = group.is_required && selections.length === 0
+
+                            return (
+                              <div key={group.id} className={`rounded-lg border p-3 ${isMissingRequired ? 'border-amber-300 bg-amber-50/60 dark:bg-amber-950/20' : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900'}`}>
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                  <p className="min-w-0 break-words text-sm font-semibold text-gray-900 dark:text-gray-100">{group.name}</p>
+                                  <span className="flex-shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                    {group.is_required ? 'Required' : 'Optional'}
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  {group.modifiers?.map((modifier) => {
+                                    const isSelected = selections.includes(modifier.id)
+
+                                    return (
+                                      <label
+                                        key={modifier.id}
+                                        className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg border p-2 text-sm ${
+                                          isSelected
+                                            ? 'border-brand-500 bg-brand-50 text-brand-900'
+                                            : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200'
+                                        }`}
+                                      >
+                                        <span className="flex min-w-0 items-center gap-2">
+                                          <input
+                                            type={group.is_multiselect ? 'checkbox' : 'radio'}
+                                            name={`staff-group-${group.id}`}
+                                            checked={isSelected}
+                                            onChange={() => setModifierSelections((current) =>
+                                              updateModifierSelection(current, group.id, modifier.id, group.is_multiselect)
+                                            )}
+                                            className="h-4 w-4 flex-shrink-0 text-brand-600 focus:ring-brand-500"
+                                          />
+                                          <span className="min-w-0 break-words">{modifier.name}</span>
+                                        </span>
+                                        {modifier.price > 0 && (
+                                          <span className="flex-shrink-0 text-xs font-semibold">
+                                            +{formatCurrency(modifier.price, restaurant.currency)}
+                                          </span>
+                                        )}
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                setCustomizingItemId(null)
+                                setModifierSelections({})
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="flex-1"
+                              disabled={!customSelectionValid}
+                              onClick={() => confirmCustomizedItem(item)}
+                            >
+                              Add {formatCurrency(selectedPrice, restaurant.currency)}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -417,19 +539,29 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
           {cartItems.length > 0 ? (
             <div className="mt-4 max-h-[50vh] space-y-3 overflow-y-auto pr-1">
               {cartItems.map((item) => (
-                <div key={item.menuItem.id} className="rounded-lg bg-gray-50 p-3 dark:bg-gray-950">
+                <div key={item.cartItemId} className="rounded-lg bg-gray-50 p-3 dark:bg-gray-950">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
                         {item.menuItem.name}
                       </p>
+                      {(item.modifiers || []).length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {item.modifiers.map((modifier) => (
+                            <p key={modifier.id} className="break-words text-xs font-medium text-gray-500 dark:text-gray-400">
+                              + {modifier.name}
+                              {modifier.price > 0 ? ` (${formatCurrency(modifier.price, restaurant.currency)})` : ''}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                       <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                        {formatCurrency(item.menuItem.price, restaurant.currency)} each
+                        {formatCurrency(calculateItemTotal(item.menuItem.price, item.modifiers), restaurant.currency)} each
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeItem(item.menuItem.id)}
+                      onClick={() => removeItem(item.cartItemId)}
                       className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
                       aria-label={`Remove ${item.menuItem.name}`}
                     >
@@ -441,7 +573,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.menuItem.id, item.quantity - 1)}
+                        onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                         aria-label={`Decrease ${item.menuItem.name}`}
                       >
@@ -452,7 +584,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                       </span>
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.menuItem.id, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"
                         aria-label={`Increase ${item.menuItem.name}`}
                       >
@@ -460,7 +592,7 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
                       </button>
                     </div>
                     <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatCurrency(Number(item.menuItem.price || 0) * item.quantity, restaurant.currency)}
+                      {formatCurrency(calculateItemTotal(item.menuItem.price, item.modifiers) * item.quantity, restaurant.currency)}
                     </p>
                   </div>
                 </div>

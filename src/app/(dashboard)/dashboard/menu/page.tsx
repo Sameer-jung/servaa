@@ -17,6 +17,51 @@ import { formatCurrency } from '@/utils/format'
 import { writeAuditLog } from '@/utils/audit'
 import { isUuid, readTrimmedString, validatePrice } from '@/utils/validation'
 
+type EditableModifier = {
+  id: string
+  name: string
+  price: number
+  isNew?: boolean
+}
+
+type EditableModifierGroup = {
+  id: string
+  name: string
+  is_required: boolean
+  is_multiselect: boolean
+  modifiers: EditableModifier[]
+  isNew?: boolean
+}
+
+function createDraftId() {
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function createEmptyModifierGroup(): EditableModifierGroup {
+  return {
+    id: createDraftId(),
+    name: '',
+    is_required: false,
+    is_multiselect: false,
+    modifiers: [{ id: createDraftId(), name: '', price: 0, isNew: true }],
+    isNew: true,
+  }
+}
+
+function normalizeModifierGroups(item: MenuItem | null): EditableModifierGroup[] {
+  return (item?.modifier_groups || []).map((group) => ({
+    id: group.id,
+    name: group.name,
+    is_required: group.is_required,
+    is_multiselect: group.is_multiselect,
+    modifiers: (group.modifiers || []).map((modifier) => ({
+      id: modifier.id,
+      name: modifier.name,
+      price: validatePrice(modifier.price) || 0,
+    })),
+  }))
+}
+
 function readOptionalUrl(value: unknown) {
   const trimmed = readTrimmedString(value, 2048)
   if (!trimmed) return null
@@ -37,6 +82,7 @@ function MenuContent() {
   const [showItemModal, setShowItemModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [modifierGroups, setModifierGroups] = useState<EditableModifierGroup[]>([])
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [error, setError] = useState('')
   const { restaurant, loading: restaurantLoading } = useRestaurant()
@@ -53,13 +99,31 @@ function MenuContent() {
     setLoading(true)
     const [{ data: cats }, { data: menuItems }] = await Promise.all([
       supabase.from('menu_categories').select('*').eq('restaurant_id', restaurant.id).order('sort_order'),
-      supabase.from('menu_items').select('*, category:menu_categories(name)').eq('restaurant_id', restaurant.id).order('sort_order'),
+      supabase.from('menu_items').select('*, category:menu_categories(name), modifier_groups(*, modifiers(*))').eq('restaurant_id', restaurant.id).order('sort_order'),
     ])
 
     setCategories(cats || [])
     setItems(menuItems || [])
     setLoading(false)
   }, [restaurant, supabase])
+
+  const openNewItemModal = () => {
+    setEditingItem(null)
+    setModifierGroups([])
+    setShowItemModal(true)
+  }
+
+  const openEditItemModal = (item: MenuItem) => {
+    setEditingItem(item)
+    setModifierGroups(normalizeModifierGroups(item))
+    setShowItemModal(true)
+  }
+
+  const closeItemModal = () => {
+    setShowItemModal(false)
+    setEditingItem(null)
+    setModifierGroups([])
+  }
 
   useEffect(() => {
     fetchData()
@@ -117,6 +181,145 @@ function MenuContent() {
     fetchData()
   }
 
+  const saveModifierGroups = async (menuItemId: string) => {
+    if (!restaurant) return true
+
+    const cleanedGroups = modifierGroups.map((group, groupIndex) => ({
+      ...group,
+      name: group.name.trim(),
+      sort_order: groupIndex,
+      modifiers: group.modifiers.map((modifier, modifierIndex) => ({
+        ...modifier,
+        name: modifier.name.trim(),
+        price: validatePrice(modifier.price) || 0,
+        sort_order: modifierIndex,
+      })).filter((modifier) => modifier.name),
+    })).filter((group) => group.name)
+
+    const existingGroupIds = (editingItem?.modifier_groups || []).map((group) => group.id)
+    const nextExistingGroupIds = cleanedGroups
+      .filter((group) => !group.isNew && isUuid(group.id))
+      .map((group) => group.id)
+    const deletedGroupIds = existingGroupIds.filter((groupId) => !nextExistingGroupIds.includes(groupId))
+
+    if (deletedGroupIds.length > 0) {
+      const { error } = await supabase
+        .from('modifier_groups')
+        .delete()
+        .eq('restaurant_id', restaurant.id)
+        .in('id', deletedGroupIds)
+
+      if (error) {
+        console.error('[MenuPage] modifier group delete error:', error.message)
+        toast.error(MESSAGES.menu.saveFailed)
+        return false
+      }
+    }
+
+    for (const group of cleanedGroups) {
+      let groupId = group.id
+
+      if (group.isNew || !isUuid(group.id)) {
+        const { data, error } = await supabase
+          .from('modifier_groups')
+          .insert({
+            restaurant_id: restaurant.id,
+            menu_item_id: menuItemId,
+            name: group.name,
+            is_required: group.is_required,
+            is_multiselect: group.is_multiselect,
+            sort_order: group.sort_order,
+          })
+          .select('id')
+          .maybeSingle()
+
+        if (error || !data) {
+          if (error) console.error('[MenuPage] modifier group insert error:', error.message)
+          toast.error(MESSAGES.menu.saveFailed)
+          return false
+        }
+
+        groupId = data.id
+      } else {
+        const { error } = await supabase
+          .from('modifier_groups')
+          .update({
+            name: group.name,
+            is_required: group.is_required,
+            is_multiselect: group.is_multiselect,
+            sort_order: group.sort_order,
+          })
+          .eq('restaurant_id', restaurant.id)
+          .eq('id', group.id)
+
+        if (error) {
+          console.error('[MenuPage] modifier group update error:', error.message)
+          toast.error(MESSAGES.menu.saveFailed)
+          return false
+        }
+      }
+
+      const originalGroup = editingItem?.modifier_groups?.find((candidate) => candidate.id === group.id)
+      const existingModifierIds = (originalGroup?.modifiers || []).map((modifier) => modifier.id)
+      const nextExistingModifierIds = group.modifiers
+        .filter((modifier) => !modifier.isNew && isUuid(modifier.id))
+        .map((modifier) => modifier.id)
+      const deletedModifierIds = existingModifierIds.filter((modifierId) => !nextExistingModifierIds.includes(modifierId))
+
+      if (deletedModifierIds.length > 0) {
+        const { error } = await supabase
+          .from('modifiers')
+          .delete()
+          .eq('restaurant_id', restaurant.id)
+          .in('id', deletedModifierIds)
+
+        if (error) {
+          console.error('[MenuPage] modifier delete error:', error.message)
+          toast.error(MESSAGES.menu.saveFailed)
+          return false
+        }
+      }
+
+      for (const modifier of group.modifiers) {
+        if (modifier.isNew || !isUuid(modifier.id)) {
+          const { error } = await supabase
+            .from('modifiers')
+            .insert({
+              restaurant_id: restaurant.id,
+              group_id: groupId,
+              name: modifier.name,
+              price: modifier.price,
+              sort_order: modifier.sort_order,
+            })
+
+          if (error) {
+            console.error('[MenuPage] modifier insert error:', error.message)
+            toast.error(MESSAGES.menu.saveFailed)
+            return false
+          }
+        } else {
+          const { error } = await supabase
+            .from('modifiers')
+            .update({
+              name: modifier.name,
+              price: modifier.price,
+              sort_order: modifier.sort_order,
+            })
+            .eq('restaurant_id', restaurant.id)
+            .eq('id', modifier.id)
+
+          if (error) {
+            console.error('[MenuPage] modifier update error:', error.message)
+            toast.error(MESSAGES.menu.saveFailed)
+            return false
+          }
+        }
+      }
+    }
+
+    return true
+  }
+
   const handleSaveItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
@@ -170,6 +373,9 @@ function MenuContent() {
         return
       }
 
+      const modifiersSaved = await saveModifierGroups(editingItem.id)
+      if (!modifiersSaved) return
+
       void writeAuditLog(supabase, {
         restaurantId: restaurant.id,
         action: 'menu_item.updated',
@@ -191,6 +397,9 @@ function MenuContent() {
         return
       }
 
+      const modifiersSaved = await saveModifierGroups(newItem.id)
+      if (!modifiersSaved) return
+
       void writeAuditLog(supabase, {
         restaurantId: restaurant.id,
         action: 'menu_item.created',
@@ -201,8 +410,7 @@ function MenuContent() {
       toast.success(MESSAGES.menu.itemCreateSuccess);
     }
 
-    setShowItemModal(false)
-    setEditingItem(null)
+    closeItemModal()
     fetchData()
   }
 
@@ -240,6 +448,54 @@ function MenuContent() {
     fetchData()
   }
 
+  const updateModifierGroup = (groupId: string, updates: Partial<EditableModifierGroup>) => {
+    setModifierGroups((current) =>
+      current.map((group) => group.id === groupId ? { ...group, ...updates } : group)
+    )
+  }
+
+  const addModifierOption = (groupId: string) => {
+    setModifierGroups((current) =>
+      current.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              modifiers: [...group.modifiers, { id: createDraftId(), name: '', price: 0, isNew: true }],
+            }
+          : group
+      )
+    )
+  }
+
+  const updateModifierOption = (
+    groupId: string,
+    modifierId: string,
+    updates: Partial<EditableModifier>
+  ) => {
+    setModifierGroups((current) =>
+      current.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              modifiers: group.modifiers.map((modifier) =>
+                modifier.id === modifierId ? { ...modifier, ...updates } : modifier
+              ),
+            }
+          : group
+      )
+    )
+  }
+
+  const removeModifierOption = (groupId: string, modifierId: string) => {
+    setModifierGroups((current) =>
+      current.map((group) =>
+        group.id === groupId
+          ? { ...group, modifiers: group.modifiers.filter((modifier) => modifier.id !== modifierId) }
+          : group
+      )
+    )
+  }
+
   const filteredItems = activeCategory
     ? items.filter((item) => item.category_id === activeCategory)
     : items
@@ -260,7 +516,7 @@ function MenuContent() {
             <Button size="sm" variant="outline" disabled={!restaurant} onClick={() => setShowCategoryModal(true)}>
               + Category
             </Button>
-            <Button size="sm" disabled={!restaurant} onClick={() => setShowItemModal(true)}>
+            <Button size="sm" disabled={!restaurant} onClick={openNewItemModal}>
               + Item
             </Button>
           </div>
@@ -361,7 +617,7 @@ function MenuContent() {
                   {item.available ? 'Available' : 'Unavailable'}
                 </button>
                 <button
-                  onClick={() => { setEditingItem(item); setShowItemModal(true) }}
+                  onClick={() => openEditItemModal(item)}
                   className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -414,10 +670,10 @@ function MenuContent() {
       {/* Item Modal */}
       <Modal
         isOpen={showItemModal}
-        onClose={() => { setShowItemModal(false); setEditingItem(null) }}
+        onClose={closeItemModal}
         title={editingItem ? 'Edit Item' : 'New Item'}
       >
-        <form onSubmit={handleSaveItem} className="space-y-4">
+        <form onSubmit={handleSaveItem} className="flex max-h-[70vh] flex-col overflow-y-auto space-y-4">
           <Input name="name" label="Item Name" defaultValue={editingItem?.name || ''} required />
           <Input name="description" label="Description" defaultValue={editingItem?.description || ''} />
           <Input name="image_url" label="Image URL" type="url" placeholder="https://example.com/item.jpg" defaultValue={editingItem?.image_url || ''} />
@@ -435,6 +691,116 @@ function MenuContent() {
             <input type="checkbox" name="available" defaultChecked={editingItem ? editingItem.available : true} className="h-4 w-4 rounded border-gray-300 text-brand-600" />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Available</span>
           </label>
+
+          <div className="space-y-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Modifier Groups</h3>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Add size, extras, or other choices for this item.</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setModifierGroups((current) => [...current, createEmptyModifierGroup()])}
+              >
+                + Group
+              </Button>
+            </div>
+
+            {modifierGroups.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 p-3 text-sm font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                No modifier groups for this item.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {modifierGroups.map((group) => (
+                  <div key={group.id} className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <Input
+                        label="Group Name"
+                        value={group.name}
+                        placeholder="Size"
+                        onChange={(event) => updateModifierGroup(group.id, { name: event.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        className="self-end"
+                        onClick={() => setModifierGroups((current) => current.filter((candidate) => candidate.id !== group.id))}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex min-h-11 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={group.is_required}
+                          onChange={(event) => updateModifierGroup(group.id, { is_required: event.target.checked })}
+                          className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Required</span>
+                      </label>
+                      <label className="flex min-h-11 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={group.is_multiselect}
+                          onChange={(event) => updateModifierGroup(group.id, { is_multiselect: event.target.checked })}
+                          className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Multi-select</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Options</p>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => addModifierOption(group.id)}>
+                          + Option
+                        </Button>
+                      </div>
+
+                      {group.modifiers.length === 0 ? (
+                        <p className="rounded-lg bg-white p-3 text-sm font-medium text-gray-500 dark:bg-gray-900 dark:text-gray-400">No options yet.</p>
+                      ) : (
+                        group.modifiers.map((modifier) => (
+                          <div key={modifier.id} className="grid gap-2 rounded-lg bg-white p-2 dark:bg-gray-900 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
+                            <Input
+                              label="Option Name"
+                              value={modifier.name}
+                              placeholder="Large"
+                              onChange={(event) => updateModifierOption(group.id, modifier.id, { name: event.target.value })}
+                            />
+                            <Input
+                              label="Price"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={modifier.price}
+                              onChange={(event) => updateModifierOption(group.id, modifier.id, { price: validatePrice(event.target.value) || 0 })}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="self-end"
+                              onClick={() => removeModifierOption(group.id, modifier.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Button type="submit" className="w-full">
             {editingItem ? 'Update' : 'Create'}
           </Button>

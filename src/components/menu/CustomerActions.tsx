@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency } from '@/utils/format'
+import type { Modifier } from '@/types'
 
 interface CustomerActionsProps {
   restaurantId: string
@@ -19,6 +20,7 @@ type OrderItemData = {
   id: string
   quantity: number
   price_snapshot: number
+  modifiers?: Modifier[] | null
   menu_item?: { name: string } | null
 }
 
@@ -40,7 +42,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
   const fetchBillData = async (): Promise<ActiveBillData | null> => {
     const { data } = await supabase
       .from('orders')
-      .select('id, special_instructions, status, total_amount, items:order_items(id, quantity, price_snapshot, menu_item:menu_items(name)), invoices(payment_status)')
+      .select('id, special_instructions, status, total_amount, items:order_items(id, quantity, price_snapshot, modifiers, menu_item:menu_items(name)), invoices(payment_status)')
       .eq('table_id', tableId)
       .eq('customer_session_id', customerSessionId)
       .in('status', ['pending', 'accepted', 'preparing', 'ready', 'completed'])
@@ -71,6 +73,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
            id: item.id,
            quantity: item.quantity,
            price_snapshot: item.price_snapshot,
+           modifiers: item.modifiers || [],
            menu_item: Array.isArray(item.menu_item) ? item.menu_item[0] : item.menu_item
          })
       })
@@ -211,13 +214,25 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, curr
           {billData && billData.items.length > 0 && (
             <div className="space-y-2 border-t border-gray-100 pt-4">
               {billData.items.map((item, idx) => (
-                <div key={item.id + idx} className="flex justify-between text-sm">
-                  <span className="text-gray-600">
-                    {item.quantity}x {item.menu_item?.name || 'Item'}
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {formatCurrency(item.price_snapshot * item.quantity, currency)}
-                  </span>
+                <div key={item.id + idx} className="space-y-0.5 text-sm">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                    <span className="min-w-0 break-words text-gray-600">
+                      {item.quantity}x {item.menu_item?.name || 'Item'}
+                    </span>
+                    <span className="font-medium text-gray-900">
+                      {formatCurrency(item.price_snapshot * item.quantity, currency)}
+                    </span>
+                  </div>
+                  {(item.modifiers || []).length > 0 && (
+                    <div className="pl-5 text-xs text-gray-500">
+                      {item.modifiers?.map((modifier) => (
+                        <p key={modifier.id} className="break-words">
+                          + {modifier.name}
+                          {modifier.price > 0 ? ` (${formatCurrency(modifier.price, currency)})` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

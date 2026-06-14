@@ -9,9 +9,10 @@ interface ModalProps {
   title?: string
   children: React.ReactNode
   className?: string
+  titleClassName?: string
 }
 
-export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, className, titleClassName }: ModalProps) {
   if (!isOpen) return null
 
   return (
@@ -27,11 +28,11 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
         )}
       >
         {title && (
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+          <div className={cn('mb-4 flex items-center justify-between gap-3', titleClassName)}>
+            <h2 className="min-w-0 break-words text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
             <button
               onClick={onClose}
-              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

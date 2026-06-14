@@ -2,6 +2,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { hashTableAccessToken } from '@/utils/tableSession'
 import { validateOrderItems, validatePrice } from '@/utils/validation'
 import { writeAuditLog } from '@/utils/audit'
+import { calculateItemTotal } from '@/utils/pricing'
+import type { Modifier } from '@/types'
 
 export type CreateOrderItemInput = NonNullable<ReturnType<typeof validateOrderItems>>[number]
 
@@ -18,6 +20,20 @@ interface CreateOrderInput {
   clientRequestId?: string | null
   actorUserId?: string | null
 }
+
+type ModifierGroupRecord = {
+  id: string
+  menu_item_id: string
+  is_required: boolean
+  is_multiselect: boolean
+  modifiers?: {
+    id: string
+    name: string
+    price: number
+  }[]
+}
+
+type ModifierRecord = NonNullable<ModifierGroupRecord['modifiers']>[number]
 
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
   const {
@@ -91,9 +107,83 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { order: null, error: 'Could not place order.', status: 500 }
   }
 
+  const { data: modifierGroups, error: modifierError } = await supabaseAdmin
+    .from('modifier_groups')
+    .select('id, menu_item_id, is_required, is_multiselect, modifiers(id, name, price)')
+    .eq('restaurant_id', restaurantId)
+    .in('menu_item_id', menuItemIds)
+
+  if (modifierError) {
+    console.error('[createOrder] modifier lookup error:', modifierError.message)
+    return { order: null, error: 'Could not validate modifiers.', status: 500 }
+  }
+
+  const groupsByMenuItemId = new Map<string, ModifierGroupRecord[]>()
+  for (const group of ((modifierGroups || []) as ModifierGroupRecord[])) {
+    const groups = groupsByMenuItemId.get(group.menu_item_id) || []
+    groups.push(group)
+    groupsByMenuItemId.set(group.menu_item_id, groups)
+  }
+
+  const verifiedModifiersByItem = new Map<CreateOrderItemInput, Modifier[]>()
+
+  for (const item of items) {
+    const groups = groupsByMenuItemId.get(item.menuItemId) || []
+    const selectedModifierIds = item.modifiers.map((modifier) => modifier.id)
+    const selectedCountsByGroupId = new Map<string, number>()
+    const verifiedModifiers: Modifier[] = []
+
+    for (const modifierId of selectedModifierIds) {
+      let matchedGroup: ModifierGroupRecord | null = null
+      let matchedModifier: ModifierRecord | null = null
+
+      for (const group of groups) {
+        const modifier = group.modifiers?.find((candidate) => candidate.id === modifierId)
+        if (modifier) {
+          matchedGroup = group
+          matchedModifier = modifier
+          break
+        }
+      }
+
+      if (!matchedGroup || !matchedModifier || validatePrice(matchedModifier.price) === null) {
+        return { order: null, error: 'One or more modifiers are unavailable', status: 400 }
+      }
+
+      selectedCountsByGroupId.set(
+        matchedGroup.id,
+        (selectedCountsByGroupId.get(matchedGroup.id) || 0) + 1
+      )
+
+      verifiedModifiers.push({
+        id: matchedModifier.id,
+        name: matchedModifier.name,
+        price: validatePrice(matchedModifier.price) || 0,
+        group_is_required: matchedGroup.is_required,
+        group_is_multiselect: matchedGroup.is_multiselect,
+      })
+    }
+
+    const hasDuplicateModifier = new Set(selectedModifierIds).size !== selectedModifierIds.length
+    const missingRequiredGroup = groups.some(
+      (group) => !actorUserId && group.is_required && !selectedCountsByGroupId.get(group.id)
+    )
+    const invalidSingleSelectGroup = groups.some(
+      (group) => !group.is_multiselect && (selectedCountsByGroupId.get(group.id) || 0) > 1
+    )
+
+    if (hasDuplicateModifier || missingRequiredGroup || invalidSingleSelectGroup) {
+      return { order: null, error: 'Invalid modifier selection', status: 400 }
+    }
+
+    verifiedModifiersByItem.set(item, verifiedModifiers)
+  }
+
   const totalAmount = Math.round(items.reduce((total, item) => {
     const menuItem = menuItemsById.get(item.menuItemId)
-    return total + (validatePrice(menuItem?.price) || 0) * item.quantity
+    const verifiedModifiers = verifiedModifiersByItem.get(item) || []
+    const itemTotal = calculateItemTotal(validatePrice(menuItem?.price) || 0, verifiedModifiers)
+    return total + itemTotal * item.quantity
   }, 0) * 100) / 100
 
   const { data: order, error: orderError } = await supabaseAdmin
@@ -114,13 +204,20 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { order: null, error: 'Could not place order.', status: 500 }
   }
 
-  const orderItems = items.map((item) => ({
-    order_id: order.id,
-    menu_item_id: item.menuItemId,
-    quantity: item.quantity,
-    price_snapshot: validatePrice(menuItemsById.get(item.menuItemId)?.price) || 0,
-    notes: item.notes,
-  }))
+  const orderItems = items.map((item) => {
+    const menuItem = menuItemsById.get(item.menuItemId)
+    const verifiedModifiers = verifiedModifiersByItem.get(item) || []
+    const itemTotal = calculateItemTotal(validatePrice(menuItem?.price) || 0, verifiedModifiers)
+
+    return {
+      order_id: order.id,
+      menu_item_id: item.menuItemId,
+      quantity: item.quantity,
+      price_snapshot: itemTotal,
+      notes: item.notes,
+      modifiers: verifiedModifiers,
+    }
+  })
 
   const { data: insertedItems, error: itemsError } = await supabaseAdmin
     .from('order_items')

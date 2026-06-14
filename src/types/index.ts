@@ -84,17 +84,19 @@ export interface MenuCategoryWithItems extends MenuCategory {
 // CART
 // ============================================
 export interface CartItem {
+  cartItemId: string
   menuItem: MenuItem
   quantity: number
   notes?: string
+  modifiers?: Modifier[]
 }
 
 export interface CartState {
   items: CartItem[]
-  addItem: (item: MenuItem, quantity?: number, notes?: string) => void
-  removeItem: (itemId: string) => void
-  updateQuantity: (itemId: string, quantity: number) => void
-  updateNotes: (itemId: string, notes: string) => void
+  addItem: (item: MenuItem, quantity?: number, notes?: string, modifiers?: Modifier[]) => void
+  removeItem: (cartItemId: string) => void
+  updateQuantity: (cartItemId: string, quantity: number) => void
+  updateNotes: (cartItemId: string, notes: string) => void
   clearCart: () => void
   totalItems: number
   totalPrice: number
@@ -110,6 +112,7 @@ export interface OrderItem {
   quantity: number
   price_snapshot: number
   notes?: string
+  modifiers?: Modifier[]
   created_at: string
   menu_item?: MenuItem
 }
