@@ -100,8 +100,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage your restaurant details</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          Settings
+        </h1>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          Manage restaurant profile, billing defaults, and customer menu access.
+        </p>
       </div>
 
       {error && (
@@ -110,69 +114,107 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Restaurant Name Card */}
-      {restaurant && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Restaurant Name</p>
-          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{restaurant.name}</p>
-          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-1">Slug: {restaurant.slug}</p>
-        </div>
-      )}
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        <div className="space-y-4">
+          {restaurant && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Restaurant
+              </p>
+              <h2 className="mt-2 truncate text-xl font-bold text-gray-900 dark:text-gray-100">
+                {restaurant.name}
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
+                Slug: {restaurant.slug}
+              </p>
+            </div>
+          )}
 
-      <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
-        <Input
-          name="name"
-          label="Restaurant Name"
-          defaultValue={restaurant?.name || ''}
-          required
-        />
-        <Input
-          name="address"
-          label="Address"
-          defaultValue={restaurant?.address || ''}
-        />
-        <Input
-          name="phone"
-          label="Phone"
-          defaultValue={restaurant?.phone || ''}
-        />
-        <Input
-          name="tax_rate"
-          label="Tax Rate (%)"
-          type="number"
-          step="0.01"
-          min="0"
-          max="100"
-          defaultValue={restaurant?.tax_rate || 0}
-        />
-        <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Currency</label>
-          <select
-            name="currency"
-            defaultValue={restaurant?.currency || 'NPR'}
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-          >
-            {currencyOptions.map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
-              </option>
-            ))}
-          </select>
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+              Customer Menu URL
+            </h3>
+            <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
+              Share this URL with customers.
+            </p>
+            <code className="mt-3 block rounded-lg bg-gray-50 p-3 text-sm text-gray-700 break-all dark:bg-gray-950 dark:text-gray-200">
+              {menuUrl || "Loading..."}
+            </code>
+          </div>
         </div>
-        <div className="pt-2">
-          <Button type="submit" isLoading={saving}>
-            {saved ? 'Saved!' : 'Save Changes'}
-          </Button>
-        </div>
-      </form>
 
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
-        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Menu URL</h3>
-        <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">Share this URL with customers</p>
-        <code className="mt-2 block rounded bg-white p-2 text-sm text-gray-700 break-all dark:bg-gray-950 dark:text-gray-200">
-          {menuUrl || 'Loading...'}
-        </code>
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        >
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Restaurant Details
+            </h2>
+            <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
+              These details appear in your dashboard and customer menu.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Input
+                name="name"
+                label="Restaurant Name"
+                defaultValue={restaurant?.name || ""}
+                required
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <Input
+                name="address"
+                label="Address"
+                defaultValue={restaurant?.address || ""}
+              />
+            </div>
+
+            <Input
+              name="phone"
+              label="Phone"
+              defaultValue={restaurant?.phone || ""}
+            />
+
+            <Input
+              name="tax_rate"
+              label="Tax Rate (%)"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              defaultValue={restaurant?.tax_rate || 0}
+            />
+
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">
+                Currency
+              </label>
+              <select
+                name="currency"
+                defaultValue={restaurant?.currency || "NPR"}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                {currencyOptions.map((currency) => (
+                  <option key={currency} value={currency}>
+                    {currency}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <Button type="submit" isLoading={saving}>
+              {saved ? "Saved!" : "Save Changes"}
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
-  )
+  );
 }
