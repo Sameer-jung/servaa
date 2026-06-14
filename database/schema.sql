@@ -119,10 +119,12 @@ CREATE TABLE order_items (
   quantity INTEGER NOT NULL DEFAULT 1,
   price_snapshot DECIMAL(10,2) NOT NULL,
   notes TEXT,
+  cancelled BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_order_items_order ON order_items(order_id);
+CREATE INDEX idx_order_items_order_cancelled ON order_items(order_id, cancelled);
 
 -- ============================================
 -- 7. INVOICES
@@ -238,18 +240,17 @@ CREATE TRIGGER update_service_requests_updated_at
   BEFORE UPDATE ON service_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Calculate order total
+-- Calculate order total (excludes cancelled items)
 CREATE OR REPLACE FUNCTION calculate_order_total(p_order_id UUID)
 RETURNS DECIMAL AS $$
-DECLARE
-  v_total DECIMAL;
 BEGIN
-  SELECT COALESCE(SUM(quantity * price_snapshot), 0)
-  INTO v_total
-  FROM order_items
-  WHERE order_id = p_order_id;
-
-  RETURN v_total;
+  RETURN COALESCE(
+    (SELECT SUM(quantity * price_snapshot)
+     FROM order_items
+     WHERE order_id = p_order_id
+       AND cancelled = false),
+    0
+  );
 END;
 $$ LANGUAGE plpgsql;
 

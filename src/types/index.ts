@@ -112,6 +112,7 @@ export interface OrderItem {
   quantity: number
   price_snapshot: number
   notes?: string
+  cancelled?: boolean
   modifiers?: Modifier[]
   created_at: string
   menu_item?: MenuItem
