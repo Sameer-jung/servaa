@@ -631,8 +631,10 @@ interface TableOrderCardProps {
   onAccept: (orderId: string) => void
   onReject: (orderId: string) => void
   onUpdateStatus: (orderId: string, status: string) => void
+  onCancelItem: (itemId: string, orderId: string) => void
   currency?: string
   updatingOrderId?: string | null
+  cancellingItemId?: string | null
 }
 
 function TableOrderCard({
@@ -642,8 +644,10 @@ function TableOrderCard({
   onAccept,
   onReject,
   onUpdateStatus,
+  onCancelItem,
   currency,
   updatingOrderId,
+  cancellingItemId,
 }: TableOrderCardProps) {
   const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
 
@@ -678,8 +682,10 @@ function TableOrderCard({
               onAccept={() => onAccept(order.id)}
               onReject={() => onReject(order.id)}
               onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+              onCancelItem={(itemId) => onCancelItem(itemId, order.id)}
               currency={currency}
-              isLoading= {updatingOrderId === order.id}
+              isLoading={updatingOrderId === order.id}
+              cancellingItemId={cancellingItemId}
             />
           ))}
         </div>
@@ -696,7 +702,8 @@ function OrdersContent() {
   const [page, setPage] = useState(0)
   const [hasNextPage, setHasNextPage] = useState(false)
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({})
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
+  const [cancellingItemId, setCancellingItemId] = useState<string | null>(null)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -875,6 +882,51 @@ function OrdersContent() {
     setUpdatingOrderId(null)
   }
 
+  const handleCancelItem = async (itemId: string, orderId: string) => {
+    if (cancellingItemId) return
+    setCancellingItemId(itemId)
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderItemId: itemId, restaurantId: restaurant?.id }),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        toast.error(result?.error || 'Failed to cancel item')
+        return
+      }
+
+      // Optimistic update: mark item cancelled, recalc total, auto-cancel order if needed
+      setOrders((prev) => prev.map((order) => {
+        if (order.id !== orderId) return order
+        const updatedItems = order.items.map((item) =>
+          item.id === itemId ? { ...item, cancelled: true } : item
+        )
+        const allCancelled = updatedItems.every((item) => item.cancelled)
+        const newTotal = updatedItems
+          .filter((item) => !item.cancelled)
+          .reduce((sum, item) => sum + item.quantity * item.price_snapshot, 0)
+        return {
+          ...order,
+          items: updatedItems,
+          status: allCancelled ? ('cancelled' as OrderStatus) : order.status,
+          total_amount: newTotal,
+        }
+      }))
+
+      if (result?.orderCancelled) {
+        toast.success('All items cancelled — order cancelled automatically.')
+      } else {
+        toast.success('Item cancelled.')
+      }
+    } finally {
+      setCancellingItemId(null)
+    }
+  }
+
   if (restaurantLoading || loading) {
     return <PageLoading />
   }
@@ -923,8 +975,10 @@ function OrdersContent() {
               onAccept={handleAccept}
               onReject={handleReject}
               onUpdateStatus={handleUpdateStatus}
+              onCancelItem={handleCancelItem}
               currency={restaurant?.currency}
               updatingOrderId={updatingOrderId}
+              cancellingItemId={cancellingItemId}
             />
           ))}
           <div className="flex items-center justify-between gap-3">

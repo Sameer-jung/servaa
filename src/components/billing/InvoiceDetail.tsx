@@ -39,32 +39,40 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
 
         <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
           <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Order Items</h4>
-          {invoice.order?.items?.map((item) => (
-            <div key={item.id} className="py-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium text-gray-600 dark:text-gray-300">
-                  {item.quantity}x {item.menu_item?.name || 'Item'}
-                </span>
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(item.price_snapshot * item.quantity, currency)}
-                </span>
-              </div>
-              {item.modifiers && item.modifiers.length > 0 && (
-                <div className="mt-0.5 space-y-0.5 pl-4">
-                  {item.modifiers.map((modifier, index) => (
-                    <div key={index} className="flex justify-between text-xs">
-                      <span className="text-gray-400 dark:text-gray-500">+ {modifier.name}</span>
-                      {modifier.price > 0 && (
-                        <span className="text-gray-400 dark:text-gray-500">
-                          {formatCurrency(modifier.price, currency)}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+          {invoice.order?.items?.map((item) => {
+            const isCancelled = Boolean(item.cancelled)
+            return (
+              <div key={item.id} className={`py-1.5 ${isCancelled ? 'opacity-60' : ''}`}>
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium text-gray-600 dark:text-gray-300">
+                    <span className={isCancelled ? 'line-through' : ''}>
+                      {item.quantity}x {item.menu_item?.name || 'Item'}
+                    </span>
+                    {isCancelled && (
+                      <span className="ml-1.5 text-xs font-semibold text-red-500">(Cancelled)</span>
+                    )}
+                  </span>
+                  <span className={`font-semibold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-600' : 'text-gray-900 dark:text-gray-100'}`}>
+                    {formatCurrency(item.price_snapshot * item.quantity, currency)}
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <div className="mt-0.5 space-y-0.5 pl-4">
+                    {item.modifiers.map((modifier, index) => (
+                      <div key={index} className="flex justify-between text-xs">
+                        <span className="text-gray-400 dark:text-gray-500">+ {modifier.name}</span>
+                        {modifier.price > 0 && (
+                          <span className="text-gray-400 dark:text-gray-500">
+                            {formatCurrency(modifier.price, currency)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         <div className="border-t border-gray-100 pt-4 space-y-2 dark:border-gray-800">

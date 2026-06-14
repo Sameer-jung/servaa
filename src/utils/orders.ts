@@ -16,5 +16,9 @@ export function hasBillableItems(order: {
   items?: unknown[] | null
   special_instructions?: string | null
 }) {
-  return !isServiceRequestOrder(order) && Array.isArray(order.items) && order.items.length > 0
+  return (
+    !isServiceRequestOrder(order) &&
+    Array.isArray(order.items) &&
+    order.items.some((item) => !(item as { cancelled?: boolean }).cancelled)
+  )
 }

@@ -68,7 +68,7 @@ function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
 }
 
 function getItemsSummary(invoice: Invoice): string {
-  const items = invoice.order?.items
+  const items = invoice.order?.items?.filter(item => !item.cancelled)
   if (!items || items.length === 0) return '—'
   return items.map(item => `${item.quantity}× ${item.menu_item?.name || 'Item'}`).join(', ')
 }
@@ -431,8 +431,8 @@ function BillingContent() {
     // As per user instruction: Use invoice totals only.
     const outstandingAmount = group?.total || 0
     
-    const openItemsCount = (group?.invoices.reduce((acc, inv) => acc + (inv.order?.items?.length || 0), 0) || 0) + 
-                           tOrders.reduce((acc, o) => acc + (o.items?.length || 0), 0)
+    const openItemsCount = (group?.invoices.reduce((acc, inv) => acc + (inv.order?.items?.filter(i => !i.cancelled).length || 0), 0) || 0) +
+                           tOrders.reduce((acc, o) => acc + o.items.filter(i => !i.cancelled).length, 0)
                            
     const cardData = {
       table,
