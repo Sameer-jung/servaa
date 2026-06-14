@@ -7,16 +7,31 @@ import { cn } from '@/utils/cn'
 import { MobileProfile } from './MobileProfile'
 import Image from 'next/image'
 
-const navItems = [
-  { href: '/dashboard', label: 'Overview' },
-  { href: '/dashboard/orders', label: 'Orders' },
-  { href: '/dashboard/menu', label: 'Menu' },
-  { href: '/dashboard/tables', label: 'Tables' },
-  { href: '/dashboard/billing', label: 'Billing' },
-  { href: '/dashboard/settings', label: 'Settings' },
-]
+const navGroups = [
+  {
+    label: "Home",
+    items: [
+      { href: "/dashboard", label: "Overview" },
+      { href: "/dashboard/orders", label: "Orders" },
+      { href: "/dashboard/menu", label: "Menu" },
+      { href: "/dashboard/tables", label: "Tables" },
+    ],
+  },
+  {
+    label: "Restaurant",
+    items: [
+      { href: "/dashboard/billing", label: "Billing" },
+      { href: "/dashboard/settings", label: "Settings" },
+    ],
+  },
+];
+
 
 export function MobileNav() {
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+      Home: true,
+      Restaurant: true,
+    });
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
 
@@ -80,31 +95,50 @@ export function MobileNav() {
             : "pointer-events-none -translate-y-2 opacity-0",
         )}
       >
-        {navItems.map((item) => {
-          const isActive = (() => {
-            if (item.href === "/dashboard") return pathname === "/dashboard";
-            return (
-              pathname === item.href || pathname?.startsWith(item.href + "/")
-            );
-          })();
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              prefetch={true}
-              onClick={() => setIsOpen(false)}
-              className={cn(
-                "block rounded-lg px-4 py-3 font-medium transition-colors",
-                "text-sm",
-                isActive
-                  ? "bg-gray-100 text-gray-950 dark:bg-gray-800 dark:text-gray-50"
-                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white",
-              )}
+        {navGroups.map((group) => (
+          <div key={group.label} className="space-y-1">
+            <button
+              type="button"
+              onClick={() =>
+                setOpenGroups((current) => ({
+                  ...current,
+                  [group.label]: !current[group.label],
+                }))
+              }
+              className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100"
             >
-              {item.label}
-            </Link>
-          );
-        })}
+              {group.label}
+              <span className="text-gray-400">
+                {openGroups[group.label] ? '⌄' : '›'}
+              </span>
+            </button>
+
+            {openGroups[group.label] &&
+              group.items.map((item) => {
+                const isActive =
+                  item.href === '/dashboard'
+                    ? pathname === '/dashboard'
+                    : pathname === item.href || pathname?.startsWith(item.href + '/')
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch={true}
+                    onClick={() => setIsOpen(false)}
+                    className={cn(
+                      'ml-3 block rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-gray-100 text-gray-950 dark:bg-gray-800 dark:text-gray-50'
+                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+          </div>
+        ))}
         <div className="mt-2 border-t border-gray-200 p-2 dark:border-gray-800">
           <MobileProfile />
         </div>
