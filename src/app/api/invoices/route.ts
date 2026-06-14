@@ -102,6 +102,19 @@ async function createInvoiceForOrder(orderId: string, restaurantId: string, acto
     .single()
 
   if (invoiceError) {
+    if (invoiceError.code === '23505') {
+      // Concurrent insert won: unique constraint violation on order_id.
+      const { data: concurrentInvoice } = await supabaseAdmin
+        .from('invoices')
+        .select('*')
+        .eq('order_id', orderId)
+        .maybeSingle()
+
+      if (concurrentInvoice) {
+        return { invoice: concurrentInvoice, error: null, status: 200 }
+      }
+    }
+    
     console.error('[invoices] invoice insert error:', invoiceError.message)
     return { invoice: null, error: 'Could not create invoice.', status: 500 }
   }
