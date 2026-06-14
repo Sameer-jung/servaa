@@ -16,6 +16,7 @@ interface MenuItemCardProps {
 
 export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: MenuItemCardProps) {
   const isAvailable = item.available
+  const hasModifiers = Boolean(item.modifier_groups?.length)
 
   return (
     <div className={isAvailable ? 'flex gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm' : 'flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 opacity-75 shadow-sm'}>
@@ -34,12 +35,12 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: Menu
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col justify-between">
+      <div className="flex min-w-0 flex-1 flex-col justify-between">
         <div>
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-medium text-gray-900">{item.name}</h3>
+            <h3 className="min-w-0 break-words font-medium text-gray-900">{item.name}</h3>
             {!isAvailable && (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+              <span className="flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
                 Out of Stock
               </span>
             )}
@@ -48,7 +49,7 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: Menu
             <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{item.description}</p>
           )}
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="font-semibold text-gray-900">{formatCurrency(item.price, currency)}</p>
           {!isAvailable ? (
             <Button size="sm" variant="secondary" disabled>
@@ -58,7 +59,7 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: Menu
             <div className="flex items-center gap-2">
               <button
                 onClick={onRemove}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:bg-gray-200"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:bg-gray-200 sm:h-8 sm:w-8"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -67,7 +68,7 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: Menu
               <span className="min-w-[1.5rem] text-center text-sm font-medium">{quantity}</span>
               <button
                 onClick={onAdd}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white active:bg-brand-700"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-600 text-white active:bg-brand-700 sm:h-8 sm:w-8"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -75,8 +76,8 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: Menu
               </button>
             </div>
           ) : (
-            <Button size="sm" onClick={onAdd}>
-              Add to Order
+            <Button size="sm" className="min-h-11 whitespace-nowrap sm:min-h-0" onClick={onAdd}>
+              {hasModifiers ? 'Customize' : 'Add to Order'}
             </Button>
           )}
         </div>

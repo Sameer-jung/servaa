@@ -204,6 +204,7 @@ export interface Database {
           quantity: number
           price_snapshot: number
           notes: string | null
+          modifiers: Json
           created_at: string
         }
         Insert: {
@@ -213,6 +214,7 @@ export interface Database {
           quantity: number
           price_snapshot: number
           notes?: string | null
+          modifiers?: Json
           created_at?: string
         }
         Update: {
@@ -222,6 +224,68 @@ export interface Database {
           quantity?: number
           price_snapshot?: number
           notes?: string | null
+          modifiers?: Json
+          created_at?: string
+        }
+      }
+      modifier_groups: {
+        Row: {
+          id: string
+          restaurant_id: string
+          menu_item_id: string
+          name: string
+          is_required: boolean
+          is_multiselect: boolean
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          menu_item_id: string
+          name: string
+          is_required?: boolean
+          is_multiselect?: boolean
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          menu_item_id?: string
+          name?: string
+          is_required?: boolean
+          is_multiselect?: boolean
+          sort_order?: number
+          created_at?: string
+        }
+      }
+      modifiers: {
+        Row: {
+          id: string
+          restaurant_id: string
+          group_id: string
+          name: string
+          price: number
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          group_id: string
+          name: string
+          price?: number
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          group_id?: string
+          name?: string
+          price?: number
+          sort_order?: number
           created_at?: string
         }
       }

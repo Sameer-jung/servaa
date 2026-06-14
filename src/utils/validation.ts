@@ -22,6 +22,13 @@ export type ValidatedOrderItem = {
   menuItemId: string
   quantity: number
   notes: string | null
+  modifiers: {
+    id: string
+    name?: string
+    price?: number
+    group_is_required?: boolean
+    group_is_multiselect?: boolean
+  }[]
 }
 
 export function validateOrderItems(value: unknown): ValidatedOrderItem[] | null {
@@ -35,8 +42,37 @@ export function validateOrderItems(value: unknown): ValidatedOrderItem[] | null 
     const record = item as Record<string, unknown>
     const menuItemId = record.menuItemId || record.menu_item_id
     const quantity = clampInteger(record.quantity, 1, 99)
+    const modifiersValue = record.modifiers
+    const modifiers: ValidatedOrderItem['modifiers'] = []
 
     if (!isUuid(menuItemId) || quantity === null) return null
+
+    if (modifiersValue !== undefined) {
+      if (!Array.isArray(modifiersValue) || modifiersValue.length > 50) return null
+
+      for (const modifierValue of modifiersValue) {
+        if (!modifierValue || typeof modifierValue !== 'object') return null
+
+        const modifierRecord = modifierValue as Record<string, unknown>
+        if (!isUuid(modifierRecord.id)) return null
+
+        const price = validatePrice(modifierRecord.price)
+
+        modifiers.push({
+          id: modifierRecord.id,
+          name: typeof modifierRecord.name === 'string'
+            ? modifierRecord.name.trim().slice(0, 100)
+            : undefined,
+          price: price ?? undefined,
+          group_is_required: typeof modifierRecord.group_is_required === 'boolean'
+            ? modifierRecord.group_is_required
+            : undefined,
+          group_is_multiselect: typeof modifierRecord.group_is_multiselect === 'boolean'
+            ? modifierRecord.group_is_multiselect
+            : undefined,
+        })
+      }
+    }
 
     items.push({
       menuItemId,
@@ -44,6 +80,7 @@ export function validateOrderItems(value: unknown): ValidatedOrderItem[] | null 
       notes: typeof record.notes === 'string' && record.notes.trim()
         ? record.notes.trim().slice(0, 500)
         : null,
+      modifiers,
     })
   }
 

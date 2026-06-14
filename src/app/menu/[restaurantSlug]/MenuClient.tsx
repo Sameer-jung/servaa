@@ -8,7 +8,8 @@ import { StickyCart } from '@/components/menu/StickyCart'
 import { CustomerActions } from '@/components/menu/CustomerActions'
 import { OrderTracker } from '@/components/menu/OrderTracker'
 import { TableInvoice } from '@/components/menu/TableInvoice'
-import { Restaurant, Table, MenuCategory, MenuItem, Order } from '@/types'
+import { ModifierModal } from '@/components/menu/ModifierModal'
+import { Restaurant, Table, MenuCategory, MenuItem, Order, Modifier } from '@/types'
 
 interface MenuClientProps {
   restaurant: Restaurant
@@ -23,6 +24,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(activeOrder)
   const [customerSessionId, setCustomerSessionId] = useState<string | null>(null)
+  const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null)
   const cart = useCartStore()
   const hasCartItems = cart.totalItems > 0
 
@@ -72,8 +74,22 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     : items
 
   const getItemQuantity = (itemId: string) => {
-    const cartItem = cart.items.find((i) => i.menuItem.id === itemId)
-    return cartItem?.quantity || 0
+    return cart.items
+      .filter((i) => i.menuItem.id === itemId)
+      .reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  const handleAddItem = (item: MenuItem) => {
+    if (item.modifier_groups?.length) {
+      setSelectedItemForModal(item)
+      return
+    }
+
+    cart.addItem(item)
+  }
+
+  const handleAddItemWithModifiers = (item: MenuItem, modifiers: Modifier[]) => {
+    cart.addItem(item, 1, '', modifiers)
   }
 
   return (
@@ -123,10 +139,11 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               item={item}
               quantity={getItemQuantity(item.id)}
               currency={restaurant.currency}
-              onAdd={() => cart.addItem(item)}
-              onRemove={() =>
-                cart.updateQuantity(item.id, getItemQuantity(item.id) - 1)
-              }
+              onAdd={() => handleAddItem(item)}
+              onRemove={() => {
+                const cartItem = [...cart.items].reverse().find((i) => i.menuItem.id === item.id)
+                if (cartItem) cart.updateQuantity(cartItem.cartItemId, cartItem.quantity - 1)
+              }}
             />
           ))
         ) : (
@@ -139,6 +156,13 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       {/* Sticky Cart */}
       {table && (
         <>
+          <ModifierModal
+            item={selectedItemForModal}
+            isOpen={Boolean(selectedItemForModal)}
+            onClose={() => setSelectedItemForModal(null)}
+            onAdd={handleAddItemWithModifiers}
+            currency={restaurant.currency}
+          />
           <StickyCart
             restaurantId={restaurant.id}
             tableId={table.id}

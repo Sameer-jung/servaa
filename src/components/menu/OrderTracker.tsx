@@ -97,14 +97,26 @@ export function OrderTracker({
           </div>
           <div className="space-y-1.5">
             {items.map((item) => (
-              <div key={item.id} className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
-                <span className="font-medium text-gray-900">{item.quantity}x</span>
-                <span className="min-w-0 truncate text-gray-600">
-                  {item.menu_item?.name || 'Item'}
-                </span>
-                <span className="font-medium text-gray-900">
-                  {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
-                </span>
+              <div key={item.id} className="space-y-0.5 text-sm">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2">
+                  <span className="font-medium text-gray-900">{item.quantity}x</span>
+                  <span className="min-w-0 break-words text-gray-600">
+                    {item.menu_item?.name || 'Item'}
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
+                  </span>
+                </div>
+                {(item.modifiers || []).length > 0 && (
+                  <div className="pl-7 text-xs text-gray-500">
+                    {item.modifiers?.map((modifier) => (
+                      <p key={modifier.id} className="break-words">
+                        + {modifier.name}
+                        {modifier.price > 0 ? ` (${formatCurrency(modifier.price, currency)})` : ''}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

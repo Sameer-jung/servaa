@@ -348,9 +348,9 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                     <div className="mt-3 space-y-1 border-t border-gray-100 pt-3 dark:border-gray-800">
                       {order.items.map((item) => (
                         <div key={item.id} className="space-y-0.5">
-                          <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
+                          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 text-sm">
                             <span className="font-semibold text-gray-900 dark:text-gray-100">{item.quantity}x</span>
-                            <span className="min-w-0 truncate font-medium text-gray-600 dark:text-gray-300">
+                            <span className="min-w-0 break-words font-medium text-gray-600 dark:text-gray-300">
                               {item.menu_item?.name || 'Item'}
                             </span>
                             <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -361,6 +361,16 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                             <p className="pl-6 text-xs font-medium text-red-600">
                               Note: {item.notes}
                             </p>
+                          )}
+                          {(item.modifiers || []).length > 0 && (
+                            <div className="pl-6 text-xs font-medium text-gray-500 dark:text-gray-400">
+                              {item.modifiers?.map((modifier) => (
+                                <p key={modifier.id} className="break-words">
+                                  + {modifier.name}
+                                  {modifier.price > 0 ? ` (${formatCurrency(modifier.price, currency)})` : ''}
+                                </p>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ))}

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { formatCurrency } from '@/utils/format'
 import { getServiceRequestLabel } from '@/utils/orders'
+import type { Modifier } from '@/types'
 
 type OrderNotificationPayload = {
   id?: string
@@ -20,6 +21,7 @@ type NotificationOrderItem = {
   quantity: number
   price_snapshot: number
   notes?: string | null
+  modifiers?: Modifier[] | null
   menu_item?: {
     name?: string | null
   } | null
@@ -100,7 +102,7 @@ export function OrderNotifications() {
           for (let attempt = 0; attempt < 3; attempt += 1) {
             const { data } = await supabase
               .from('orders')
-              .select('id, table_id, total_amount, special_instructions, table:tables(table_number), items:order_items(id, quantity, price_snapshot, notes, menu_item:menu_items(name))')
+              .select('id, table_id, total_amount, special_instructions, table:tables(table_number), items:order_items(id, quantity, price_snapshot, notes, modifiers, menu_item:menu_items(name))')
               .eq('id', order.id)
               .eq('restaurant_id', restaurant.id)
               .maybeSingle()
@@ -157,6 +159,16 @@ export function OrderNotifications() {
                           <p className="pl-6 text-xs font-medium text-red-600">
                             Note: {item.notes}
                           </p>
+                        )}
+                        {(item.modifiers || []).length > 0 && (
+                          <div className="pl-6 text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {item.modifiers?.map((modifier) => (
+                              <p key={modifier.id}>
+                                + {modifier.name}
+                                {modifier.price > 0 ? ` (${formatCurrency(modifier.price, restaurant.currency)})` : ''}
+                              </p>
+                            ))}
+                          </div>
                         )}
                       </div>
                     ))

@@ -86,8 +86,8 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
         <div className="mt-3 space-y-1">
           {order.items.map((item) => (
             <div key={item.id} className="space-y-0.5 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="font-medium text-gray-600 dark:text-gray-300">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                <span className="min-w-0 break-words font-medium text-gray-600 dark:text-gray-300">
                   {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
                 </span>
                 <span className="font-medium text-gray-500 dark:text-gray-400">
@@ -98,6 +98,16 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, compact, 
                 <p className="text-xs font-medium text-red-600">
                   Note: {item.notes}
                 </p>
+              )}
+              {(item.modifiers || []).length > 0 && (
+                <div className="pl-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {item.modifiers?.map((modifier) => (
+                    <p key={modifier.id} className="break-words">
+                      + {modifier.name}
+                      {modifier.price > 0 ? ` (${formatCurrency(modifier.price, currency)})` : ''}
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
           ))}
