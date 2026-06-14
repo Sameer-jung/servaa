@@ -7,6 +7,8 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { Tabs } from '@/components/ui/Tabs'
+import { DashboardAnalytics } from '@/components/dashboard/DashboardAnalytics'
 import { useDebouncedRealtimeRefresh, useRealtimeOrders } from '@/hooks/useRealtime'
 import { formatCurrency, formatDate, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
@@ -81,6 +83,7 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableSummary[] {
 }
 
 export function DashboardOverview({ restaurantId, currency }: DashboardOverviewProps) {
+  const [activeTab, setActiveTab] = useState<'orders' | 'analytics'>('orders')
   const [stats, setStats] = useState<DashboardStats>(emptyStats)
   const [recentOrders, setRecentOrders] = useState<OrderWithItems[]>([])
   const [recentPage, setRecentPage] = useState(0)
@@ -235,9 +238,21 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">Recent Orders</h2>
-        {recentTableSummaries.length > 0 ? (
-          <div className="space-y-3">
+        <Tabs
+          tabs={[
+            { id: 'orders', label: 'Recent Orders' },
+            { id: 'analytics', label: 'Analytics' },
+          ]}
+          activeTab={activeTab}
+          onChange={(id) => setActiveTab(id as 'orders' | 'analytics')}
+        />
+
+        {activeTab === 'analytics' ? (
+          <div className="mt-4">
+            <DashboardAnalytics restaurantId={restaurantId} currency={currency} />
+          </div>
+        ) : recentTableSummaries.length > 0 ? (
+          <div className="mt-4 space-y-3">
             {recentTableSummaries.map((table) => (
               <button
                 key={table.tableId}
@@ -288,7 +303,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
             </div>
           </div>
         ) : (
-          <EmptyState title="No orders yet" description="Orders will appear here when customers start ordering." icon={<svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
+          <EmptyState className="mt-4" title="No orders yet" description="Orders will appear here when customers start ordering." icon={<svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
         )}
       </div>
 
