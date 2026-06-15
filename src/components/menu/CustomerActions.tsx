@@ -3,7 +3,6 @@
 import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency } from '@/utils/format'
@@ -38,8 +37,6 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
   const [showOrderFirst, setShowOrderFirst] = useState(false)
   const [billData, setBillData] = useState<ActiveBillData | null>(null)
   const [showBillModal, setShowBillModal] = useState(false)
-
-  const supabase = createClient()
 
   const fetchBillData = async (): Promise<ActiveBillData | null> => {
     const params = new URLSearchParams({ tableId })
@@ -123,46 +120,31 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
 
   const performServiceRequest = async (type: 'water' | 'bill' | 'waiter') => {
     setRequesting(type)
-    
-    const serviceRequest = await supabase
-      .from('service_requests')
-      .insert({
-        restaurant_id: restaurantId,
-        table_id: tableId,
-        request_type: type,
-        status: 'pending',
-        customer_session_id: customerSessionId,
+
+    try {
+      const res = await fetch('/api/service-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId, tableId, type, customerSessionId }),
       })
-      .select('id')
-      .maybeSingle()
 
-    const { data: legacyOrder, error } = await supabase.from('orders').insert({
-      restaurant_id: restaurantId,
-      table_id: tableId,
-      status: 'pending',
-      total_amount: 0,
-      special_instructions: type === 'water' ? 'REQUEST: Water' : type === 'waiter' ? 'REQUEST: Waiter' : 'REQUEST: Bill',
-      customer_session_id: customerSessionId,
-    }).select('id').maybeSingle()
-  
-    if (serviceRequest.data?.id && legacyOrder?.id) {
-      await supabase
-        .from('service_requests')
-        .update({ legacy_order_id: legacyOrder.id })
-        .eq('id', serviceRequest.data.id)
-    }
+      if (!res.ok) throw new Error('request failed')
 
-    setRequesting(null)
-
-    if (!error || serviceRequest.data) {
       setConfirmed(type)
       setTimeout(() => setConfirmed(null), 3000)
       if (type === 'bill') setShowBillModal(false)
-      
-      const msg = type === 'water' ? MESSAGES.serviceRequest.waterSent : type === 'waiter' ? 'Waiter requested!' : MESSAGES.serviceRequest.billSent;
-      toast.success(msg);
-    } else {
-      toast.error(MESSAGES.serviceRequest.sendFailed);
+
+      const msg =
+        type === 'water'
+          ? MESSAGES.serviceRequest.waterSent
+          : type === 'waiter'
+            ? 'Waiter requested!'
+            : MESSAGES.serviceRequest.billSent
+      toast.success(msg)
+    } catch {
+      toast.error(MESSAGES.serviceRequest.sendFailed)
+    } finally {
+      setRequesting(null)
     }
   }
 
