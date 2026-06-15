@@ -21,6 +21,7 @@ type NotificationOrderItem = {
   quantity: number
   price_snapshot: number
   notes?: string | null
+  item_name_snapshot?: string | null
   modifiers?: Modifier[] | null
   menu_item?: {
     name?: string | null

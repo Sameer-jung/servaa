@@ -21,6 +21,7 @@ type OrderItemData = {
   id: string
   quantity: number
   price_snapshot: number
+  item_name_snapshot?: string | null
   modifiers?: Modifier[] | null
   menu_item?: { name: string } | null
 }
@@ -52,7 +53,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
       id: string
       special_instructions?: string | null
       total_amount?: number | null
-      items?: { id: string; quantity: number; price_snapshot: number; modifiers?: Modifier[] | null; menu_item?: { name: string } | null }[]
+      items?: { id: string; quantity: number; price_snapshot: number; item_name_snapshot?: string | null; modifiers?: Modifier[] | null; menu_item?: { name: string } | null }[]
       invoices?: { payment_status: string }[] | { payment_status: string } | null
     }[] | null = json?.orders ?? null
 
