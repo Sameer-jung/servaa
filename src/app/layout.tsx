@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'react-hot-toast'
-import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Servaa - Restaurant Management System',
   description: 'In-restaurant QR ordering and management system for cafes and restaurants',
+  icons: {
+    icon: '/logo/servaa.png',
+  },
 }
 
 export default function RootLayout({
