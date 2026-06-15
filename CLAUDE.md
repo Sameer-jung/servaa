@@ -51,12 +51,21 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 `pending → accepted → preparing → ready → completed` (or `→ cancelled`). Completing an order triggers invoice creation. Service requests live in the `service_requests` table; legacy zero-total orders also exist for compatibility — `src/utils/orders.ts` filters them from billable logic.
 
+**Item-level cancellation**: `order_items` has a `cancelled BOOLEAN NOT NULL DEFAULT false` column. A Postgres trigger (`calculate_order_total`) recalculates `orders.total_amount` automatically on every item update — do not recompute totals manually. If all items in an order are cancelled, the order status is auto-set to `cancelled`. Use `PATCH /api/orders` (`{ orderItemId, restaurantId }`) for staff-initiated item cancellation — this is the only path; do not cancel items by writing directly to Supabase from the client. If an unpaid invoice exists when an item is cancelled, the API recalculates and updates its subtotal/tax/grand_total. The `hasBillableItems` helper in `src/utils/orders.ts` accounts for cancelled items — use it before creating invoices.
+
+**Service request filtering**: `isServiceRequestOrder` (in `src/utils/orders.ts`) detects legacy zero-total orders created for waiter/water/bill requests by matching `special_instructions`. Filter these out of any revenue, order-count, or analytics logic.
+
+### Dashboard analytics
+
+`src/components/dashboard/DashboardAnalytics.tsx` renders revenue, order counts, top-5 items, and a category revenue donut. It filters service-request orders and cancelled items from all metrics. Integrated into `DashboardOverview` behind an Orders / Analytics tab toggle. The revenue card uses `orders.total_amount` (DB-maintained); the donut/top-items derive revenue from `price_snapshot × quantity` on items — keep these in sync when changing how order totals are calculated.
+
 ### Database setup (fresh)
 
 Run in order:
 1. `database/schema.sql`
 2. `database/rls_policies.sql`
 3. `database/scalability.sql`
+4. `database/001_order_item_cancellation.sql`
 
 Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`.
 
@@ -82,4 +91,10 @@ See `.env.local.example` for the full template.
 - Do not make audit logging block async operations.
 - Do not drop compatibility columns (`notes`, legacy zero-total orders) without a phased migration.
 - The `SUPABASE_SERVICE_ROLE_KEY` must never appear in browser-accessible code — use the admin client (`src/lib/supabase/admin.ts`) only in server routes/actions.
-- Same color combination almost everywhere 
+- Do not cancel order items by writing directly to Supabase from client code — always go through `PATCH /api/orders`.
+- Same color combination almost everywhere
+
+## Known debt
+
+- `groupOrdersByTable` and `getTableStatus` are duplicated between `src/components/dashboard/DashboardOverview.tsx` and `src/app/(dashboard)/dashboard/orders/page.tsx` — should be extracted to a shared util.
+- The "Total" label in `DashboardAnalytics` orders card counts only completed + cancelled orders, not in-flight ones — label should say "Resolved" to avoid confusion.
