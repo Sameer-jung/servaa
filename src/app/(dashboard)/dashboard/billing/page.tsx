@@ -70,7 +70,7 @@ function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
 function getItemsSummary(invoice: Invoice): string {
   const items = invoice.order?.items?.filter(item => !item.cancelled)
   if (!items || items.length === 0) return '—'
-  return items.map(item => `${item.quantity}× ${item.menu_item?.name || 'Item'}`).join(', ')
+  return items.map(item => `${item.quantity}× ${item.item_name_snapshot || item.menu_item?.name || 'Item'}`).join(', ')
 }
 
 function groupInvoicesByTable(invoices: Invoice[]): TableInvoiceGroup[] {

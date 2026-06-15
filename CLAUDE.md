@@ -26,7 +26,11 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 | `/(auth)/login`, `/(auth)/register` | Auth route group |
 | `/(dashboard)/dashboard` | Protected staff/owner dashboard |
 | `/menu/[restaurantSlug]` | Customer-facing QR menu (`?table=&t=` tokens) |
-| `/api/orders`, `/api/qr`, `/api/invoices` | Server-side route handlers |
+| `/api/orders` | Create order (POST), cancel item (PATCH) |
+| `/api/orders/status` | Staff: update order status with state-machine enforcement (PATCH) |
+| `/api/orders/bill` | Customer: fetch their unpaid orders for bill summary (GET) |
+| `/api/orders/[orderId]/status` | Customer: poll a single order's status (GET) |
+| `/api/qr`, `/api/invoices` | QR generation, invoice management |
 
 `src/middleware.ts` guards `/dashboard` routes via Supabase session check.
 
@@ -53,6 +57,12 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 **Item-level cancellation**: `order_items` has a `cancelled BOOLEAN NOT NULL DEFAULT false` column. A Postgres trigger (`calculate_order_total`) recalculates `orders.total_amount` automatically on every item update — do not recompute totals manually. If all items in an order are cancelled, the order status is auto-set to `cancelled`. Use `PATCH /api/orders` (`{ orderItemId, restaurantId }`) for staff-initiated item cancellation — this is the only path; do not cancel items by writing directly to Supabase from the client. If an unpaid invoice exists when an item is cancelled, the API recalculates and updates its subtotal/tax/grand_total. The `hasBillableItems` helper in `src/utils/orders.ts` accounts for cancelled items — use it before creating invoices.
 
+**Order status transitions**: Staff use `PATCH /api/orders/status` (`{ orderId, restaurantId, status }`). A server-enforced state machine in that route defines valid transitions — never update order status directly from the client or by calling Supabase directly from a server route that bypasses the transition check.
+
+**Customer order reads**: After the C1 security fix, customers no longer have open RLS read access to `orders` or `order_items`. All customer-facing reads go through server endpoints that validate `customerSessionId` or a hashed table token: `GET /api/orders/[orderId]/status` for order tracking, `GET /api/orders/bill` for the bill summary, `GET /api/orders/session` for the full session. Do not re-add open `USING (true)` policies on these tables.
+
+**Item name snapshot**: `order_items` has `item_name_snapshot TEXT` which stores the menu item name at order creation time (same pattern as `price_snapshot`). Always write `item_name_snapshot` when inserting order items — see `src/lib/orders/createOrder.ts`. Display code must prefer `item.item_name_snapshot || item.menu_item?.name` so history survives menu item deletion. The `menu_item_id` FK is `ON DELETE SET NULL` (nullable) for the same reason.
+
 **Service request filtering**: `isServiceRequestOrder` (in `src/utils/orders.ts`) detects legacy zero-total orders created for waiter/water/bill requests by matching `special_instructions`. Filter these out of any revenue, order-count, or analytics logic.
 
 ### Dashboard analytics
@@ -66,6 +76,8 @@ Run in order:
 2. `database/rls_policies.sql`
 3. `database/scalability.sql`
 4. `database/001_order_item_cancellation.sql`
+5. `database/002_security_fixes.sql`
+6. `database/003_item_name_snapshot.sql`
 
 Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`.
 
@@ -92,6 +104,8 @@ See `.env.local.example` for the full template.
 - Do not drop compatibility columns (`notes`, legacy zero-total orders) without a phased migration.
 - The `SUPABASE_SERVICE_ROLE_KEY` must never appear in browser-accessible code — use the admin client (`src/lib/supabase/admin.ts`) only in server routes/actions.
 - Do not cancel order items by writing directly to Supabase from client code — always go through `PATCH /api/orders`.
+- Do not update order status by writing directly to Supabase — always go through `PATCH /api/orders/status` so the state machine is enforced.
+- Do not re-add open `USING (true)` RLS policies on `orders` or `order_items` — customer reads are gated through server endpoints.
 - Same color combination almost everywhere
 
 ## Known debt

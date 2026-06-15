@@ -26,6 +26,7 @@ interface OrderItem {
   quantity: number
   price_snapshot: number | null
   cancelled: boolean | null
+  item_name_snapshot?: string | null
   menu_item: {
     id: string
     name: string
@@ -136,7 +137,7 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
     for (const order of completed) {
       for (const item of order.items) {
         if (item.cancelled) continue
-        const name = item.menu_item?.name ?? 'Unknown'
+        const name = item.item_name_snapshot || (item.menu_item?.name ?? 'Unknown')
         const itemRevenue = item.quantity * Number(item.price_snapshot ?? 0)
         const existing = itemMap.get(name)
         if (existing) {

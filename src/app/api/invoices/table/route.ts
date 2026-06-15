@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
-import { readTrimmedString } from '@/utils/validation'
+import { isUuid, readTrimmedString } from '@/utils/validation'
 
 type InvoiceOrderRelation = {
   table_id?: string | null
@@ -12,7 +12,7 @@ type InvoiceWithOrderRelation = {
 }
 
 async function validateTableAccess(tableId: string, token: string | null) {
-  if (!token) return true
+  if (!token) return false
 
   const { data: table, error } = await supabaseAdmin
     .from('tables')
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const tableId = searchParams.get('tableId')
     const tableToken = readTrimmedString(searchParams.get('tableToken'), 256) || getBearerToken(request)
 
-    if (!tableId) {
+    if (!isUuid(tableId)) {
       return NextResponse.json({ error: 'Missing tableId' }, { status: 400 })
     }
 

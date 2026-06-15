@@ -108,7 +108,8 @@ export interface CartState {
 export interface OrderItem {
   id: string
   order_id: string
-  menu_item_id: string
+  menu_item_id: string | null
+  item_name_snapshot?: string
   quantity: number
   price_snapshot: number
   notes?: string
