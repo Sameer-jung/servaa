@@ -76,6 +76,7 @@ const PERIOD_LABELS: Record<Period, string> = { today: 'Today', week: 'This Week
 export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: DashboardAnalyticsProps) {
   const [period, setPeriod] = useState<Period>('today')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [revenue, setRevenue] = useState(0)
   const [totalOrders, setTotalOrders] = useState(0)
   const [completionRate, setCompletionRate] = useState(0)
@@ -84,6 +85,7 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true)
+    setError(false)
     const supabase = createClient()
 
     const periodStart = getPeriodStart(period)
@@ -105,10 +107,17 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
         .in('status', ['completed', 'cancelled']),
     ])
 
-    const completed = ((completedResult.data as CompletedOrder[] | null) ?? []).filter(
+    if (completedResult.error || allOrdersResult.error) {
+      console.error('[DashboardAnalytics] fetch error:', completedResult.error ?? allOrdersResult.error)
+      setError(true)
+      setLoading(false)
+      return
+    }
+
+    const completed = ((completedResult.data as unknown as CompletedOrder[] | null) ?? []).filter(
       (o) => !isServiceRequestOrder(o)
     )
-    const allOrders = ((allOrdersResult.data as AllOrder[] | null) ?? []).filter(
+    const allOrders = ((allOrdersResult.data as unknown as AllOrder[] | null) ?? []).filter(
       (o) => !isServiceRequestOrder(o)
     )
 
@@ -161,6 +170,22 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
   const maxItemQty = topItems[0]?.qty ?? 1
   const periodLabel = PERIOD_LABELS[period]
   const totalCatRevenue = categoryData.reduce((s, d) => s + d.revenue, 0)
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-8 text-center dark:border-red-900/40 dark:bg-red-950/20">
+        <p className="text-sm font-semibold text-red-600 dark:text-red-400">Failed to load analytics</p>
+        <p className="mt-1 text-xs text-red-500 dark:text-red-500">Check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={fetchAnalytics}
+          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

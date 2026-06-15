@@ -908,7 +908,7 @@ function OrdersContent() {
         const allCancelled = updatedItems.every((item) => item.cancelled)
         const newTotal = updatedItems
           .filter((item) => !item.cancelled)
-          .reduce((sum, item) => sum + item.quantity * item.price_snapshot, 0)
+          .reduce((sum, item) => sum + item.quantity * (item.price_snapshot ?? 0), 0)
         return {
           ...order,
           items: updatedItems,
@@ -922,6 +922,8 @@ function OrdersContent() {
       } else {
         toast.success('Item cancelled.')
       }
+    } catch {
+      toast.error('Network error — please try again.')
     } finally {
       setCancellingItemId(null)
     }
