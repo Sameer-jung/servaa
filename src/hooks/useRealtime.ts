@@ -91,33 +91,47 @@ export function useDebouncedRealtimeRefresh(callback: () => void, delayMs = 400)
   }, [delayMs])
 }
 
-export function useOrderStatus(orderId: string, onStatusChange: (status: OrderStatus) => void) {
-  const supabase = createClient()
+// Polls /api/orders/[orderId]/status every 5 seconds instead of using a
+// Supabase Realtime subscription, which required orders_select_by_table: USING (true).
+export function useOrderStatus(
+  orderId: string,
+  onStatusChange: (status: OrderStatus) => void,
+  credentials?: { customerSessionId?: string | null; tableToken?: string }
+) {
+  const onStatusChangeRef = useRef(onStatusChange)
+  const currentStatusRef = useRef<OrderStatus | null>(null)
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+  }, [onStatusChange])
 
   useEffect(() => {
     if (!orderId) return
 
-    const channel = supabase
-      .channel(`order-status:${orderId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${orderId}`,
-        },
-        (payload) => {
-          const order = readOrderPayload(payload.new)
-          if (isOrderStatus(order?.status)) {
-            onStatusChange(order.status)
-          }
+    const poll = async () => {
+      try {
+        const params = new URLSearchParams()
+        if (credentials?.customerSessionId) {
+          params.set('customerSessionId', credentials.customerSessionId)
         }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
+        if (credentials?.tableToken) {
+          params.set('tableToken', credentials.tableToken)
+        }
+        const res = await fetch(`/api/orders/${orderId}/status?${params}`)
+        if (!res.ok) return
+        const data = await res.json()
+        const newStatus = data?.status
+        if (isOrderStatus(newStatus) && newStatus !== currentStatusRef.current) {
+          currentStatusRef.current = newStatus
+          onStatusChangeRef.current(newStatus)
+        }
+      } catch {
+        // silently ignore transient poll errors
+      }
     }
-  }, [orderId, onStatusChange, supabase])
+
+    poll()
+    const intervalId = window.setInterval(poll, 5000)
+    return () => window.clearInterval(intervalId)
+  }, [orderId, credentials?.customerSessionId, credentials?.tableToken])
 }

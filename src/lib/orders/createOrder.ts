@@ -85,7 +85,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const menuItemIds = Array.from(new Set(items.map((item) => item.menuItemId)))
   const { data: menuItems, error: menuError } = await supabaseAdmin
     .from('menu_items')
-    .select('id, restaurant_id, price, available')
+    .select('id, restaurant_id, price, available, name')
     .eq('restaurant_id', restaurantId)
     .in('id', menuItemIds)
 
@@ -212,6 +212,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return {
       order_id: order.id,
       menu_item_id: item.menuItemId,
+      item_name_snapshot: menuItem?.name || '',
       quantity: item.quantity,
       price_snapshot: itemTotal,
       notes: item.notes,

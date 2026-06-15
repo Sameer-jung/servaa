@@ -208,7 +208,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await reconcileCompletedOrders(restaurantId)
+    // Fire-and-forget: do not block the GET response on reconciliation
+    void reconcileCompletedOrders(restaurantId).catch((e) => {
+      console.error('[invoices.GET] reconcile error:', e)
+    })
 
     let query = supabaseAdmin
       .from('invoices')

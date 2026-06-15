@@ -135,7 +135,7 @@ export function TableInvoice({ tableId, tableToken, currency }: TableInvoiceProp
             {items.map((item) => (
               <div key={item.id} className="flex justify-between text-sm">
                 <span className="text-gray-600">
-                  {item.quantity}x {item.menu_item?.name || 'Item'}
+                  {item.quantity}x {item.item_name_snapshot || item.menu_item?.name || 'Item'}
                 </span>
                 <span className="font-medium text-gray-900">
                   {formatCurrency(item.price_snapshot * item.quantity, currency)}

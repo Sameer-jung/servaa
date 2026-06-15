@@ -119,6 +119,8 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             items={trackedOrder.items || []}
             totalAmount={trackedOrder.total_amount || 0}
             currency={restaurant.currency}
+            customerSessionId={customerSessionId}
+            tableToken={tableToken}
           />
         </div>
       )}
@@ -176,6 +178,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               restaurantId={restaurant.id}
               tableId={table.id}
               customerSessionId={customerSessionId}
+              tableToken={tableToken}
               currency={restaurant.currency}
             />
           )}

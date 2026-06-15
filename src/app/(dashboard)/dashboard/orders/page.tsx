@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
 import { MenuCategory, MenuItem, Modifier, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
-import { writeAuditLog } from '@/utils/audit'
 import { calculateItemTotal } from '@/utils/pricing'
 import {
   getSelectedModifierRecords,
@@ -794,6 +793,16 @@ function OrdersContent() {
     })
   }
 
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus): Promise<boolean> => {
+    if (!restaurant) return false
+    const response = await fetch('/api/orders/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, restaurantId: restaurant.id, status: newStatus }),
+    })
+    return response.ok
+  }
+
   const handleAccept = async (orderId: string) => {
     if(updatingOrderId) return
     setUpdatingOrderId(orderId)
@@ -803,41 +812,29 @@ function OrdersContent() {
     const newStatus: OrderStatus = isServiceReq ? 'completed' : 'accepted'
 
     applyOptimisticStatus(orderId, newStatus)
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
-    
+    const ok = await updateOrderStatus(orderId, newStatus)
+
     if (isServiceReq) {
       await supabase.from('service_requests').update({ status: 'completed' }).eq('legacy_order_id', orderId)
     }
 
-    if (error) fetchOrders()
-    if (!error && restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: newStatus },
-      })
-      toast.success(isServiceReq ? 'Request completed' : MESSAGES.staffOrder.accepted);
+    if (!ok) {
+      fetchOrders()
+    } else {
+      toast.success(isServiceReq ? 'Request completed' : MESSAGES.staffOrder.accepted)
     }
     setUpdatingOrderId(null)
   }
 
   const handleReject = async (orderId: string) => {
-    if(updatingOrderId) return 
+    if(updatingOrderId) return
     setUpdatingOrderId(orderId)
     applyOptimisticStatus(orderId, 'cancelled')
-    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
-    if (error) fetchOrders()
-    if (!error && restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: 'cancelled' },
-      })
-      toast.success(MESSAGES.staffOrder.rejected);
+    const ok = await updateOrderStatus(orderId, 'cancelled')
+    if (!ok) {
+      fetchOrders()
+    } else {
+      toast.success(MESSAGES.staffOrder.rejected)
     }
     setUpdatingOrderId(null)
   }
@@ -847,25 +844,16 @@ function OrdersContent() {
     setUpdatingOrderId(orderId)
     const nextStatus = status as OrderStatus
     applyOptimisticStatus(orderId, nextStatus)
-    const { error } = await supabase.from('orders').update({ status: nextStatus }).eq('id', orderId)
-    if (error) {
+    const ok = await updateOrderStatus(orderId, nextStatus)
+    if (!ok) {
       fetchOrders()
       setUpdatingOrderId(null)
-      toast.error(MESSAGES.staffOrder.updateFailed);
+      toast.error(MESSAGES.staffOrder.updateFailed)
       return
     }
 
-    if (restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: nextStatus },
-      })
-      if (nextStatus === 'preparing') toast.success(MESSAGES.staffOrder.preparing)
-      if (nextStatus === 'ready') toast.success(MESSAGES.staffOrder.ready)
-    }
+    if (nextStatus === 'preparing') toast.success(MESSAGES.staffOrder.preparing)
+    if (nextStatus === 'ready') toast.success(MESSAGES.staffOrder.ready)
 
     if (nextStatus === 'completed' && restaurant) {
       const response = await fetch('/api/invoices', {
@@ -877,7 +865,7 @@ function OrdersContent() {
       if (!response.ok) {
         fetchOrders()
       }
-      if (nextStatus === 'completed') toast.success(MESSAGES.staffOrder.completed)
+      toast.success(MESSAGES.staffOrder.completed)
     }
     setUpdatingOrderId(null)
   }

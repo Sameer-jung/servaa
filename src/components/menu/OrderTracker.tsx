@@ -20,6 +20,8 @@ interface OrderTrackerProps {
   items?: OrderItem[]
   totalAmount?: number
   currency?: string
+  customerSessionId?: string | null
+  tableToken?: string
 }
 
 export function OrderTracker({
@@ -28,12 +30,16 @@ export function OrderTracker({
   items = [],
   totalAmount = 0,
   currency,
+  customerSessionId,
+  tableToken,
 }: OrderTrackerProps) {
   const [status, setStatus] = useState<OrderStatus>(initialStatus)
 
-  useOrderStatus(orderId, (newStatus) => {
-    if (newStatus) setStatus(newStatus)
-  })
+  useOrderStatus(
+    orderId,
+    (newStatus) => { if (newStatus) setStatus(newStatus) },
+    { customerSessionId, tableToken }
+  )
 
   const currentIndex = statusSteps.findIndex((s) => s.status === status)
 
@@ -101,7 +107,7 @@ export function OrderTracker({
                 <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2">
                   <span className="font-medium text-gray-900">{item.quantity}x</span>
                   <span className="min-w-0 break-words text-gray-600">
-                    {item.menu_item?.name || 'Item'}
+                    {item.item_name_snapshot || item.menu_item?.name || 'Item'}
                   </span>
                   <span className="font-medium text-gray-900">
                     {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}
