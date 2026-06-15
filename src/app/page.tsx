@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/Button'
 import { useState } from 'react'
 import {useRouter} from 'next/navigation'
+import { LandingNavbar } from '@/components/Landing/LandingNavbar'
 
 export default function HomePage() {
 
@@ -22,6 +23,11 @@ export default function HomePage() {
   }
   return (
     <div className="min-h-screen bg-white">
+      <LandingNavbar
+      loadingAction={loadingAction}
+      onStartTrial={goToRegister}
+      onSignIn={goToLogin}
+      />
       {/* Hero */}
       <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="text-center">
