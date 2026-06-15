@@ -9,7 +9,8 @@ npm run dev          # Start Next.js dev server
 npm run build        # Production build (requires valid Supabase env vars)
 npm run lint         # ESLint (next lint)
 npm run db:types     # Regenerate src/types/supabase.ts from live Supabase schema
-npm run db:migrate   # Apply database/schema.sql to DATABASE_URL
+npm run db:migrate   # Apply database/schema.sql to DATABASE_URL (fresh local DB only)
+npx tsc --noEmit     # TypeScript check without building
 ```
 
 No test runner is configured.
@@ -27,10 +28,14 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 | `/(dashboard)/dashboard` | Protected staff/owner dashboard |
 | `/menu/[restaurantSlug]` | Customer-facing QR menu (`?table=&t=` tokens) |
 | `/api/orders` | Create order (POST), cancel item (PATCH) |
-| `/api/orders/status` | Staff: update order status with state-machine enforcement (PATCH) |
-| `/api/orders/bill` | Customer: fetch their unpaid orders for bill summary (GET) |
+| `/api/orders/status` | Staff: advance order status with state-machine enforcement (PATCH) |
+| `/api/orders/bill` | Customer: fetch unpaid orders for bill summary (GET) |
 | `/api/orders/[orderId]/status` | Customer: poll a single order's status (GET) |
-| `/api/qr`, `/api/invoices` | QR generation, invoice management |
+| `/api/orders/session` | Customer: fetch full order session (GET) |
+| `/api/qr` | Generate table QR code (POST) |
+| `/api/invoices` | Invoice CRUD (GET/POST/PATCH) |
+| `/api/invoices/send` | Push invoice to customer table (POST) |
+| `/api/invoices/table` | Customer invoice delivery and acknowledgement (GET/PATCH) |
 
 `src/middleware.ts` guards `/dashboard` routes via Supabase session check.
 
@@ -47,6 +52,16 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 - `restaurants.owner_id` is the owner; `staff_members` table holds `owner`/`staff` roles.
 - `src/utils/roles.ts` contains access control helpers. Do not introduce a parallel RBAC system.
 
+### Customer order security
+
+Customers do not have open RLS read access to `orders` or `order_items`. All customer-facing reads are gated through server endpoints that validate a `customerSessionId` or hashed table token:
+
+- `GET /api/orders/[orderId]/status` — order tracking
+- `GET /api/orders/bill` — bill summary modal
+- `GET /api/orders/session` — full session view
+
+Do not re-add `USING (true)` policies on `orders` or `order_items`.
+
 ### QR codes
 
 Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_data_url` (PNG data URL) are stored directly on the `tables` row. Do not move QR storage to Supabase Storage.
@@ -55,13 +70,11 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 `pending → accepted → preparing → ready → completed` (or `→ cancelled`). Completing an order triggers invoice creation. Service requests live in the `service_requests` table; legacy zero-total orders also exist for compatibility — `src/utils/orders.ts` filters them from billable logic.
 
+**Order status transitions**: Staff use `PATCH /api/orders/status` (`{ orderId, restaurantId, status }`). A server-enforced state machine in that route defines valid transitions — never update order status by writing directly to Supabase from client code.
+
 **Item-level cancellation**: `order_items` has a `cancelled BOOLEAN NOT NULL DEFAULT false` column. A Postgres trigger (`calculate_order_total`) recalculates `orders.total_amount` automatically on every item update — do not recompute totals manually. If all items in an order are cancelled, the order status is auto-set to `cancelled`. Use `PATCH /api/orders` (`{ orderItemId, restaurantId }`) for staff-initiated item cancellation — this is the only path; do not cancel items by writing directly to Supabase from the client. If an unpaid invoice exists when an item is cancelled, the API recalculates and updates its subtotal/tax/grand_total. The `hasBillableItems` helper in `src/utils/orders.ts` accounts for cancelled items — use it before creating invoices.
 
-**Order status transitions**: Staff use `PATCH /api/orders/status` (`{ orderId, restaurantId, status }`). A server-enforced state machine in that route defines valid transitions — never update order status directly from the client or by calling Supabase directly from a server route that bypasses the transition check.
-
-**Customer order reads**: After the C1 security fix, customers no longer have open RLS read access to `orders` or `order_items`. All customer-facing reads go through server endpoints that validate `customerSessionId` or a hashed table token: `GET /api/orders/[orderId]/status` for order tracking, `GET /api/orders/bill` for the bill summary, `GET /api/orders/session` for the full session. Do not re-add open `USING (true)` policies on these tables.
-
-**Item name snapshot**: `order_items` has `item_name_snapshot TEXT` which stores the menu item name at order creation time (same pattern as `price_snapshot`). Always write `item_name_snapshot` when inserting order items — see `src/lib/orders/createOrder.ts`. Display code must prefer `item.item_name_snapshot || item.menu_item?.name` so history survives menu item deletion. The `menu_item_id` FK is `ON DELETE SET NULL` (nullable) for the same reason.
+**Item name + price snapshots**: `order_items` stores both `price_snapshot` and `item_name_snapshot` at order creation time. This preserves the full line item even if the menu item is later edited or deleted. `menu_item_id` is nullable (`ON DELETE SET NULL`). Display code must prefer `item.item_name_snapshot || item.menu_item?.name` — never rely solely on the joined `menu_item`. Always write `item_name_snapshot` when inserting order items (see `src/lib/orders/createOrder.ts`). Several components define local order item types — add `item_name_snapshot?: string | null` to any new local type.
 
 **Service request filtering**: `isServiceRequestOrder` (in `src/utils/orders.ts`) detects legacy zero-total orders created for waiter/water/bill requests by matching `special_instructions`. Filter these out of any revenue, order-count, or analytics logic.
 
@@ -72,12 +85,14 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 ### Database setup (fresh)
 
 Run in order:
+
 1. `database/schema.sql`
 2. `database/rls_policies.sql`
 3. `database/scalability.sql`
-4. `database/001_order_item_cancellation.sql`
-5. `database/002_security_fixes.sql`
-6. `database/003_item_name_snapshot.sql`
+4. `database/add_modifiers.sql`
+5. `database/001_order_item_cancellation.sql`
+6. `database/002_security_fixes.sql`
+7. `database/003_item_name_snapshot.sql`
 
 Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`.
 
@@ -94,8 +109,6 @@ SUPABASE_SERVICE_ROLE_KEY     # server-only, never expose to browser
 NEXT_PUBLIC_APP_URL           # base URL for QR links (Vercel also reads VERCEL_URL)
 ```
 
-See `.env.local.example` for the full template.
-
 ## Patterns to preserve
 
 - Do not duplicate cart state, order creation APIs, or RBAC role models.
@@ -106,9 +119,11 @@ See `.env.local.example` for the full template.
 - Do not cancel order items by writing directly to Supabase from client code — always go through `PATCH /api/orders`.
 - Do not update order status by writing directly to Supabase — always go through `PATCH /api/orders/status` so the state machine is enforced.
 - Do not re-add open `USING (true)` RLS policies on `orders` or `order_items` — customer reads are gated through server endpoints.
-- Same color combination almost everywhere
+- Always write `item_name_snapshot` when inserting order items. Display code must prefer the snapshot over the joined menu item name.
+- When adding a new local type for order items in a component, always include `item_name_snapshot?: string | null`.
 
 ## Known debt
 
 - `groupOrdersByTable` and `getTableStatus` are duplicated between `src/components/dashboard/DashboardOverview.tsx` and `src/app/(dashboard)/dashboard/orders/page.tsx` — should be extracted to a shared util.
 - The "Total" label in `DashboardAnalytics` orders card counts only completed + cancelled orders, not in-flight ones — label should say "Resolved" to avoid confusion.
+- `DashboardAnalytics.tsx`, `OrderNotifications.tsx`, and `CustomerActions.tsx` each define their own local order item types instead of importing `OrderItem` from `@/types` — these should be unified.
