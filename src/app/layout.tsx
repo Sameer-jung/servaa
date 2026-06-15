@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'react-hot-toast'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Servaa - Restaurant Management System',
@@ -21,7 +22,7 @@ export default function RootLayout({
         <Toaster 
           position="bottom-center"
           toastOptions={{
-            duration: 3000,
+            duration: 1500,
             style: {
               background: '#1f2937',
               color: '#fff',
