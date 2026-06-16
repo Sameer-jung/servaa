@@ -2,7 +2,7 @@
 
 import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
-import { useState, useEffect,useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { Button } from '@/components/ui/Button'
@@ -18,8 +18,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [menuUrl, setMenuUrl] = useState('')
   const [error, setError] = useState('')
-  const supabase = useMemo(() => createClient(), [])
-  const [loginEmail, setLoginEmail] = useState('')
+  const supabase = useMemo(() => createClient(), []);
+  const [loginEmail, setLoginEmail] = useState("");
 
   useEffect(() => {
     const slug = validateSlug(restaurant?.slug)
@@ -29,13 +29,14 @@ export default function SettingsPage() {
     }
   }, [restaurant])
 
-  useEffect(()=> {
-      const loadUserEmail = async () => {
-        const { data } = await supabase.auth.getUser();
-        setLoginEmail(data.user?.email || "");
-      };
-      loadUserEmail();
-  }, [supabase])
+  useEffect(() => {
+    const loadUserEmail = async () => {
+      const { data } = await supabase.auth.getUser();
+      setLoginEmail(data.user?.email || "");
+    };
+
+    loadUserEmail();
+  }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
