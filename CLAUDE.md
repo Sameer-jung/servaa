@@ -36,6 +36,9 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 | `/api/invoices` | Invoice CRUD (GET/POST/PATCH) |
 | `/api/invoices/send` | Push invoice to customer table (POST) |
 | `/api/invoices/table` | Customer invoice delivery and acknowledgement (GET/PATCH) |
+| `/api/inventory` | Staff: inventory item CRUD (GET/POST/PATCH) |
+| `/api/inventory/movements` | Staff: stock movement ledger (GET/POST) |
+| `/api/expenses` | Owner-only: expense CRUD (GET/POST/PATCH/DELETE) |
 
 `src/middleware.ts` guards `/dashboard` routes via Supabase session check.
 
@@ -82,6 +85,18 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 `src/components/dashboard/DashboardAnalytics.tsx` renders revenue, order counts, top-5 items, and a category revenue donut. It filters service-request orders and cancelled items from all metrics. Integrated into `DashboardOverview` behind an Orders / Analytics tab toggle. The revenue card uses `orders.total_amount` (DB-maintained); the donut/top-items derive revenue from `price_snapshot × quantity` on items — keep these in sync when changing how order totals are calculated.
 
+### Inventory & expenses (Operations module)
+
+Manual stock tracking and expense logging, added in `004_inventory_expenses.sql`. Lives under the dashboard "Operations" nav group (`/dashboard/inventory`, `/dashboard/expenses`).
+
+- **Tables**: `inventory_items` (stock items), `stock_movements` (append-only ledger), `expenses`. `inventory_items.current_quantity` is a **cached projection maintained by the `update_inventory_quantity` trigger** off `stock_movements` — never write it from app code (same pattern as `orders.total_amount`). `recompute_all_inventory_quantities(restaurant_id)` rebuilds projections from the ledger if they ever drift.
+- **Ledger is append-only**: corrections are new `adjustment` movements; stocktakes are `count` movements whose `quantity_delta` is `counted − current_quantity`, computed server-side in `/api/inventory/movements`. Do not add UPDATE paths for stock_movements.
+- **Movement signing is server-owned**: clients send a positive magnitude plus `movement_type`; the API signs it (purchase `+`, usage/wastage `−`, adjustment signed, count computed). Do not write movements directly from the client.
+- **Purchase → expense bridge**: a `purchase` movement with `createExpense: true` + `unit_cost` also inserts a linked `expenses` row (`source: 'inventory_purchase'`). This is **owner-gated inside the route** because expenses are owner-only — staff purchases still record stock but skip the expense.
+- **RBAC**: inventory is staff-level (`is_restaurant_staff`); **expenses are owner-only** (`is_restaurant_owner` in RLS, `isOwner` in the API). The UI hides the Expenses nav item and gates the page for non-owners via `useRole` (`src/hooks/useRole.ts`) — but the server check is authoritative.
+- **Money report**: the Expenses page computes Revenue (completed `orders.total_amount`, service-requests filtered) − Expenses = Net for today/week/month, reusing the analytics donut pattern.
+- **Decoupled from orders**: inventory does not auto-deplete on order completion in V1 — this is intentional. Recipe links / auto-depletion are explicitly deferred.
+
 ### Database setup (fresh)
 
 Run in order:
@@ -90,11 +105,15 @@ Run in order:
 2. `database/rls_policies.sql`
 3. `database/scalability.sql`
 4. `database/add_modifiers.sql`
-5. `database/001_order_item_cancellation.sql`
-6. `database/002_security_fixes.sql`
+5. `database/001_order_item_cancellation.sql` (no-op on a fresh `schema.sql`, which already has the `cancelled` column + updated total function — safe to run)
+6. `database/002_security_fixes.sql` (must run after `rls_policies.sql` and `add_modifiers.sql` — it rewrites those policies)
 7. `database/003_item_name_snapshot.sql`
+8. `database/fix_duplicate_invoices.sql` (adds the `UNIQUE(order_id)` constraint on `invoices` that the invoices API relies on for idempotency — **not** present in `schema.sql`)
+9. `database/004_inventory_expenses.sql`
 
-Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`.
+**Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
+
+Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`, `service_requests`. (`schema.sql` sets `REPLICA IDENTITY FULL` on these but does not add them to the `supabase_realtime` publication — that is a dashboard/`ALTER PUBLICATION` step.) Do **not** add the inventory/expense tables to the realtime publication — those surfaces refetch on mutation by design.
 
 ### Path aliases
 
@@ -121,6 +140,8 @@ NEXT_PUBLIC_APP_URL           # base URL for QR links (Vercel also reads VERCEL_
 - Do not re-add open `USING (true)` RLS policies on `orders` or `order_items` — customer reads are gated through server endpoints.
 - Always write `item_name_snapshot` when inserting order items. Display code must prefer the snapshot over the joined menu item name.
 - When adding a new local type for order items in a component, always include `item_name_snapshot?: string | null`.
+- Do not write `inventory_items.current_quantity` directly — it is maintained by the `stock_movements` trigger. Record a movement instead.
+- Do not record stock movements or expenses by writing directly to Supabase from the client — always go through `/api/inventory/movements` and `/api/expenses`. Expenses are owner-only.
 
 ## Known debt
 
