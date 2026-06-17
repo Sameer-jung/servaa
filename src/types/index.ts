@@ -193,6 +193,65 @@ export interface StaffMember {
   }
 }
 
+// ============================================
+// INVENTORY & EXPENSES
+// ============================================
+export type InventoryUnit = 'kg' | 'g' | 'l' | 'ml' | 'piece' | 'bottle' | 'packet' | 'other'
+
+export type StockMovementType = 'purchase' | 'usage' | 'wastage' | 'adjustment' | 'count'
+
+export type ExpenseCategory =
+  | 'ingredients'
+  | 'supplies'
+  | 'rent'
+  | 'salaries'
+  | 'utilities'
+  | 'equipment'
+  | 'marketing'
+  | 'other'
+
+export interface InventoryItem {
+  id: string
+  restaurant_id: string
+  name: string
+  unit: InventoryUnit
+  category?: string | null
+  current_quantity: number
+  reorder_threshold: number
+  cost_per_unit?: number | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface StockMovement {
+  id: string
+  restaurant_id: string
+  inventory_item_id: string
+  movement_type: StockMovementType
+  quantity_delta: number
+  unit_cost?: number | null
+  note?: string | null
+  expense_id?: string | null
+  actor_user_id?: string | null
+  created_at: string
+}
+
+export interface Expense {
+  id: string
+  restaurant_id: string
+  category: ExpenseCategory
+  amount: number
+  vendor?: string | null
+  payment_method?: string | null
+  expense_date: string
+  note?: string | null
+  source: 'manual' | 'inventory_purchase'
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface AuditLog {
   id: string
   restaurant_id: string

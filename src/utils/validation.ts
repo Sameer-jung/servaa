@@ -120,6 +120,73 @@ export function validatePrice(value: unknown): number | null {
   return Math.round(parsed * 100) / 100
 }
 
+const inventoryUnits = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'packet', 'other'] as const
+const stockMovementTypes = ['purchase', 'usage', 'wastage', 'adjustment', 'count'] as const
+const expenseCategories = [
+  'ingredients',
+  'supplies',
+  'rent',
+  'salaries',
+  'utilities',
+  'equipment',
+  'marketing',
+  'other',
+] as const
+
+export function validateInventoryUnit(value: unknown): (typeof inventoryUnits)[number] | null {
+  return typeof value === 'string' && inventoryUnits.includes(value as (typeof inventoryUnits)[number])
+    ? (value as (typeof inventoryUnits)[number])
+    : null
+}
+
+export function validateStockMovementType(value: unknown): (typeof stockMovementTypes)[number] | null {
+  return typeof value === 'string' && stockMovementTypes.includes(value as (typeof stockMovementTypes)[number])
+    ? (value as (typeof stockMovementTypes)[number])
+    : null
+}
+
+export function validateExpenseCategory(value: unknown): (typeof expenseCategories)[number] | null {
+  return typeof value === 'string' && expenseCategories.includes(value as (typeof expenseCategories)[number])
+    ? (value as (typeof expenseCategories)[number])
+    : null
+}
+
+// Non-negative quantity rounded to 3 decimals (stock levels, thresholds, counts).
+export function validateQuantity(value: unknown): number | null {
+  const parsed = typeof value === 'string' && value.trim()
+    ? Number(value)
+    : typeof value === 'number'
+      ? value
+      : null
+
+  if (parsed === null || !Number.isFinite(parsed)) return null
+  if (parsed < 0 || parsed > 99999999.999) return null
+  return Math.round(parsed * 1000) / 1000
+}
+
+// Signed quantity delta rounded to 3 decimals (manual adjustments).
+export function validateSignedQuantity(value: unknown): number | null {
+  const parsed = typeof value === 'string' && value.trim()
+    ? Number(value)
+    : typeof value === 'number'
+      ? value
+      : null
+
+  if (parsed === null || !Number.isFinite(parsed)) return null
+  if (Math.abs(parsed) > 99999999.999) return null
+  return Math.round(parsed * 1000) / 1000
+}
+
+// YYYY-MM-DD date string (expense_date). Returns the normalized string or null.
+export function validateDateString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null
+  const date = new Date(`${trimmed}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return null
+  return trimmed
+}
+
 export function validateTableNumber(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
