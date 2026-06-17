@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState, useMemo } from "react";
 import Image from "next/image"
 import {
+  Boxes,
   ChevronRight,
   ExternalLink,
   Home,
@@ -16,6 +17,7 @@ import {
   Store,
   Table2,
   Utensils,
+  Wallet,
   ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from 'lucide-react'
@@ -23,6 +25,7 @@ import { cn } from '@/utils/cn'
 import { ProfileMenu } from './ProfileMenu'
 import { createClient } from "@/lib/supabase/client";
 import { useRestaurant } from "@/hooks/useRestaurant";
+import { useRole } from "@/hooks/useRole";
 
 type NavItem = {
   href: string
@@ -41,13 +44,15 @@ export function DashboardSidebar() {
 
 
   const { restaurant } = useRestaurant();
+  const { isOwner } = useRole(restaurant?.id);
 
-  
+
   const supabase = useMemo (() => createClient(), []);
 
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Home: true,
+    Operations: true,
     Restaurant: true,
   });
 
@@ -87,6 +92,17 @@ export function DashboardSidebar() {
         },
         { href: "/dashboard/menu", label: "Menu", icon: Utensils },
         { href: "/dashboard/tables", label: "Tables", icon: Table2 },
+      ],
+    },
+    {
+      label: "Operations",
+      href: "/dashboard/inventory",
+      icon: Boxes,
+      items: [
+        { href: "/dashboard/inventory", label: "Inventory", icon: Boxes },
+        ...(isOwner
+          ? [{ href: "/dashboard/expenses", label: "Expenses", icon: Wallet }]
+          : []),
       ],
     },
     {
