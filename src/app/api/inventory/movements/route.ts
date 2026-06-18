@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/utils/audit'
@@ -14,10 +16,11 @@ import {
 } from '@/utils/validation'
 
 export async function GET(request: Request) {
+  let restaurantId: string | null = null
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const restaurantId = searchParams.get('restaurantId')
+    restaurantId = searchParams.get('restaurantId')
     const inventoryItemId = searchParams.get('inventoryItemId')
     const page = clampInteger(searchParams.get('page') || 0, 0, 10000)
     const pageSize = clampInteger(searchParams.get('pageSize') || 50, 1, 100)
@@ -55,21 +58,26 @@ export async function GET(request: Request) {
     const { data: movements, error } = await query.range(from, to)
 
     if (error) {
+      Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
       console.error('[inventory.movements.GET] query error:', error.message)
       return NextResponse.json({ error: 'Could not load movements.' }, { status: 500 })
     }
 
     return NextResponse.json({ movements: movements || [] })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
     console.error('[inventory.movements.GET] error:', error)
     return NextResponse.json({ error: 'Failed to load movements' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
+  let restaurantId: string | undefined
+  let inventoryItemId: string | undefined
   try {
     const body = await request.json()
-    const { restaurantId, inventoryItemId } = body
+    restaurantId = body.restaurantId
+    inventoryItemId = body.inventoryItemId
 
     if (!isUuid(restaurantId) || !isUuid(inventoryItemId)) {
       return NextResponse.json({ error: 'Invalid movement payload' }, { status: 400 })
@@ -107,6 +115,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (itemError) {
+      Sentry.captureException(itemError, { tags: { restaurant_id: restaurantId, inventory_item_id: inventoryItemId } })
       console.error('[inventory.movements.POST] item lookup error:', itemError.message)
       return NextResponse.json({ error: 'Could not load item.' }, { status: 500 })
     }
@@ -183,6 +192,7 @@ export async function POST(request: Request) {
           .single()
 
         if (expenseError) {
+          Sentry.captureException(expenseError, { tags: { restaurant_id: restaurantId, inventory_item_id: inventoryItemId } })
           console.error('[inventory.movements.POST] expense insert error:', expenseError.message)
           return NextResponse.json({ error: 'Could not record expense.' }, { status: 500 })
         }
@@ -206,6 +216,7 @@ export async function POST(request: Request) {
       .single()
 
     if (movementError) {
+      Sentry.captureException(movementError, { tags: { restaurant_id: restaurantId, inventory_item_id: inventoryItemId } })
       console.error('[inventory.movements.POST] insert error:', movementError.message)
       // Roll back the bridged expense so we don't leave an orphan.
       if (expenseId) {
@@ -238,6 +249,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ movement })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId, inventory_item_id: inventoryItemId } })
     console.error('[inventory.movements.POST] error:', error)
     return NextResponse.json({ error: 'Failed to record movement' }, { status: 500 })
   }

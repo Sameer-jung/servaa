@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { generateQRCodeDataUrl, getTableQRUrl } from '@/utils/qr'
 import { generateTableAccessToken, hashTableAccessToken } from '@/utils/tableSession'
 
 export async function POST(request: Request) {
+  let tableId: string | undefined
   try {
-    const { tableId, restaurantSlug, tableNumber } = await request.json()
+    const body = await request.json()
+    tableId = body.tableId
+    const { restaurantSlug, tableNumber } = body
 
     if (!tableId || !restaurantSlug || !tableNumber) {
       return NextResponse.json(
@@ -29,6 +34,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (tableError) {
+      Sentry.captureException(tableError, { tags: { table_id: tableId } })
       return NextResponse.json({ error: tableError.message }, { status: 500 })
     }
 
@@ -54,11 +60,13 @@ export async function POST(request: Request) {
       .eq('id', tableId)
 
     if (updateError) {
+      Sentry.captureException(updateError, { tags: { table_id: tableId } })
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
     return NextResponse.json({ qrCodeUrl: qrCodeDataUrl, url })
   } catch (error) {
+    Sentry.captureException(error, { tags: { table_id: tableId } })
     const message = error instanceof Error ? error.message : 'Failed to generate QR code'
     return NextResponse.json(
       { error: message },

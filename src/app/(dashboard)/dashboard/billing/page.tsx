@@ -1,8 +1,9 @@
 'use client'
 
 import toast from "react-hot-toast";
-import { MESSAGES } from "@/utils/messages"; 
+import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
+import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -358,6 +359,13 @@ function BillingContent() {
           body: JSON.stringify({ invoiceId, payment_status: 'paid', payment_method: method }),
         })
       ))
+      invoiceIds.forEach((invoiceId) => {
+        posthog.capture('payment_completed', {
+          restaurant_id: restaurant?.id,
+          invoice_id: invoiceId,
+          payment_method: method,
+        })
+      })
       await fetchData();
       setShowDetail(false);
       setPaymentModalInfo(null);

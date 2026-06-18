@@ -3,6 +3,7 @@
 import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
 import { useState } from 'react'
+import posthog from 'posthog-js'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency } from '@/utils/format'
@@ -125,10 +126,16 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
       const res = await fetch('/api/service-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantId, tableId, type, customerSessionId }),
+        body: JSON.stringify({ restaurantId, tableId, type, customerSessionId, tableToken }),
       })
 
       if (!res.ok) throw new Error('request failed')
+
+      posthog.capture('service_request_created', {
+        restaurant_id: restaurantId,
+        table_id: tableId,
+        request_type: type,
+      })
 
       setConfirmed(type)
       setTimeout(() => setConfirmed(null), 3000)

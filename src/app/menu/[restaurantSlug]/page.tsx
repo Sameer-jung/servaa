@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, unstable_rethrow } from 'next/navigation'
+import { hashTableAccessToken } from '@/utils/tableSession'
 import { MenuClient } from './MenuClient'
 
 interface MenuPageProps {
@@ -49,14 +50,18 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
       notFound()
     }
 
-    // Get table
+    // Get table. Requires a valid tableToken matching the table's stored QR
+    // token hash — without one, we don't resolve a table identity at all, so
+    // nobody can spoof ?table=<number> without having scanned that table's
+    // real QR code.
     let table = null
-    if (tableNumber) {
+    if (tableNumber && tableToken) {
       const { data: tableData, error: tableError } = await supabase
         .from('tables')
         .select('*')
         .eq('restaurant_id', restaurant.id)
         .eq('table_number', tableNumber)
+        .eq('qr_token_hash', hashTableAccessToken(tableToken))
         .eq('is_active', true)
         .single()
 

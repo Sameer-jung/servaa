@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import posthog from 'posthog-js'
 import { useCartStore } from '@/hooks/useCartStore'
 import { MenuCategoryTabs } from '@/components/menu/CategoryTabs'
 import { MenuItemCard } from '@/components/menu/MenuItemCard'
@@ -36,6 +37,15 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       cart.setRestaurantContext(restaurant.id, table.id)
     }
   }, [restaurant.id, table, cart])
+
+  useEffect(() => {
+    if (table) {
+      posthog.group('restaurant', restaurant.id)
+      posthog.capture('qr_scanned', { restaurant_id: restaurant.id, table_id: table.id })
+    }
+    posthog.capture('menu_viewed', { restaurant_id: restaurant.id, table_id: table?.id ?? null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!table) return

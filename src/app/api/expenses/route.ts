@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/utils/audit'
@@ -13,10 +15,11 @@ import {
 } from '@/utils/validation'
 
 export async function GET(request: Request) {
+  let restaurantId: string | null = null
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const restaurantId = searchParams.get('restaurantId')
+    restaurantId = searchParams.get('restaurantId')
     const category = searchParams.get('category')
     const from = searchParams.get('from')
     const to = searchParams.get('to')
@@ -65,21 +68,24 @@ export async function GET(request: Request) {
     const { data: expenses, error } = await query.range(rangeFrom, rangeTo)
 
     if (error) {
+      Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
       console.error('[expenses.GET] query error:', error.message)
       return NextResponse.json({ error: 'Could not load expenses.' }, { status: 500 })
     }
 
     return NextResponse.json({ expenses: expenses || [] })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
     console.error('[expenses.GET] error:', error)
     return NextResponse.json({ error: 'Failed to load expenses' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
+  let restaurantId: string | undefined
   try {
     const body = await request.json()
-    const { restaurantId } = body
+    restaurantId = body.restaurantId
 
     if (!isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid expense payload' }, { status: 400 })
@@ -127,6 +133,7 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
+      Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
       console.error('[expenses.POST] insert error:', error.message)
       return NextResponse.json({ error: 'Could not create expense.' }, { status: 500 })
     }
@@ -142,15 +149,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ expense })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
     console.error('[expenses.POST] error:', error)
     return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let expenseId: string | undefined
+  let restaurantId: string | undefined
   try {
     const body = await request.json()
-    const { expenseId, restaurantId } = body
+    expenseId = body.expenseId
+    restaurantId = body.restaurantId
 
     if (!isUuid(expenseId) || !isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid expense update' }, { status: 400 })
@@ -203,6 +214,7 @@ export async function PATCH(request: Request) {
       .single()
 
     if (error) {
+      Sentry.captureException(error, { tags: { expense_id: expenseId, restaurant_id: restaurantId } })
       console.error('[expenses.PATCH] update error:', error.message)
       return NextResponse.json({ error: 'Could not update expense.' }, { status: 500 })
     }
@@ -218,16 +230,19 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ expense })
   } catch (error) {
+    Sentry.captureException(error, { tags: { expense_id: expenseId, restaurant_id: restaurantId } })
     console.error('[expenses.PATCH] error:', error)
     return NextResponse.json({ error: 'Failed to update expense' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
+  let expenseId: string | null = null
+  let restaurantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
-    const expenseId = searchParams.get('expenseId')
-    const restaurantId = searchParams.get('restaurantId')
+    expenseId = searchParams.get('expenseId')
+    restaurantId = searchParams.get('restaurantId')
 
     if (!isUuid(expenseId) || !isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid expense delete' }, { status: 400 })
@@ -251,6 +266,7 @@ export async function DELETE(request: Request) {
       .eq('restaurant_id', restaurantId)
 
     if (error) {
+      Sentry.captureException(error, { tags: { expense_id: expenseId, restaurant_id: restaurantId } })
       console.error('[expenses.DELETE] delete error:', error.message)
       return NextResponse.json({ error: 'Could not delete expense.' }, { status: 500 })
     }
@@ -266,6 +282,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    Sentry.captureException(error, { tags: { expense_id: expenseId, restaurant_id: restaurantId } })
     console.error('[expenses.DELETE] error:', error)
     return NextResponse.json({ error: 'Failed to delete expense' }, { status: 500 })
   }

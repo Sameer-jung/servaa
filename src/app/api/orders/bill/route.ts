@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { isUuid, readTrimmedString } from '@/utils/validation'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
@@ -7,9 +9,10 @@ import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
 // Replaces the direct client-side Supabase query in CustomerActions that
 // required order_items_select_public: USING (true).
 export async function GET(request: Request) {
+  let tableId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
-    const tableId = searchParams.get('tableId')
+    tableId = searchParams.get('tableId')
     const customerSessionId = readTrimmedString(searchParams.get('customerSessionId'), 128)
     const tableToken = readTrimmedString(searchParams.get('tableToken'), 256) || getBearerToken(request)
 
@@ -47,12 +50,14 @@ export async function GET(request: Request) {
       .limit(25)
 
     if (error) {
+      Sentry.captureException(error, { tags: { table_id: tableId } })
       console.error('[orders.bill.GET] error:', error.message)
       return NextResponse.json({ error: 'Failed to load bill data' }, { status: 500 })
     }
 
     return NextResponse.json({ orders: orders || [] })
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { table_id: tableId } })
     return NextResponse.json({ error: 'Failed to load bill data' }, { status: 500 })
   }
 }
