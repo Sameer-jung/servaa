@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { Restaurant } from '@/types'
 
@@ -49,6 +50,9 @@ export function useRestaurant() {
         .maybeSingle()
 
       setRestaurant(data || null)
+      if (data) {
+        posthog.group('restaurant', data.id)
+      }
     } catch (error) {
       console.error('Error fetching restaurant:', error)
     } finally {

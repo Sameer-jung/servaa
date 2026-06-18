@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useState } from 'react'
+import posthog from 'posthog-js'
 import { useCartStore } from '@/hooks/useCartStore'
 import { formatCurrency } from '@/utils/format'
 import { calculateItemTotal } from '@/utils/pricing'
@@ -77,6 +78,13 @@ export function OrderSidebar({
       const result = await response.json().catch(() => null)
 
       if (response.ok && result?.order) {
+        posthog.capture('order_placed', {
+          restaurant_id: restaurantId,
+          table_id: tableId,
+          order_id: result.order.id,
+          item_count: cart.totalItems,
+          total_amount: cart.totalPrice,
+        })
         onOrderPlaced?.(result.order as Order)
         cart.clearCart()
         toast.success(MESSAGES.customerOrder.sentToKitchen)

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/utils/audit'
@@ -48,10 +50,11 @@ async function resolveCategory(
 }
 
 export async function GET(request: Request) {
+  let restaurantId: string | null = null
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const restaurantId = searchParams.get('restaurantId')
+    restaurantId = searchParams.get('restaurantId')
     const lowStockOnly = searchParams.get('lowStock') === 'true'
 
     if (!isUuid(restaurantId)) {
@@ -76,6 +79,7 @@ export async function GET(request: Request) {
       .order('name', { ascending: true })
 
     if (error) {
+      Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
       console.error('[inventory.GET] query error:', error.message)
       return NextResponse.json({ error: 'Could not load inventory.' }, { status: 500 })
     }
@@ -88,15 +92,17 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ items: result })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
     console.error('[inventory.GET] error:', error)
     return NextResponse.json({ error: 'Failed to load inventory' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
+  let restaurantId: string | undefined
   try {
     const body = await request.json()
-    const { restaurantId } = body
+    restaurantId = body.restaurantId
 
     if (!isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid inventory payload' }, { status: 400 })
@@ -147,6 +153,7 @@ export async function POST(request: Request) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'An item with this name already exists.' }, { status: 409 })
       }
+      Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
       console.error('[inventory.POST] insert error:', error.message)
       return NextResponse.json({ error: 'Could not create item.' }, { status: 500 })
     }
@@ -162,15 +169,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ item })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId } })
     console.error('[inventory.POST] error:', error)
     return NextResponse.json({ error: 'Failed to create item' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let itemId: string | undefined
+  let restaurantId: string | undefined
   try {
     const body = await request.json()
-    const { itemId, restaurantId } = body
+    itemId = body.itemId
+    restaurantId = body.restaurantId
 
     if (!isUuid(itemId) || !isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid inventory update' }, { status: 400 })
@@ -239,6 +250,7 @@ export async function PATCH(request: Request) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'An item with this name already exists.' }, { status: 409 })
       }
+      Sentry.captureException(error, { tags: { inventory_item_id: itemId, restaurant_id: restaurantId } })
       console.error('[inventory.PATCH] update error:', error.message)
       return NextResponse.json({ error: 'Could not update item.' }, { status: 500 })
     }
@@ -254,6 +266,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ item })
   } catch (error) {
+    Sentry.captureException(error, { tags: { inventory_item_id: itemId, restaurant_id: restaurantId } })
     console.error('[inventory.PATCH] error:', error)
     return NextResponse.json({ error: 'Failed to update item' }, { status: 500 })
   }

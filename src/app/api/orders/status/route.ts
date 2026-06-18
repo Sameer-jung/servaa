@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { isUuid } from '@/utils/validation'
@@ -25,8 +27,13 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 }
 
 export async function PATCH(request: Request) {
+  let orderId: string | undefined
+  let restaurantId: string | undefined
   try {
-    const { orderId, restaurantId, status } = await request.json()
+    const body = await request.json()
+    orderId = body.orderId
+    restaurantId = body.restaurantId
+    const { status } = body
 
     if (!isUuid(orderId) || !isUuid(restaurantId) || !isOrderStatus(status)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -67,6 +74,7 @@ export async function PATCH(request: Request) {
       .eq('id', orderId)
 
     if (updateError) {
+      Sentry.captureException(updateError, { tags: { order_id: orderId, restaurant_id: restaurantId } })
       console.error('[orders.status.PATCH] update error:', updateError.message)
       return NextResponse.json({ error: 'Failed to update order status' }, { status: 500 })
     }
@@ -82,6 +90,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, status })
   } catch (error) {
+    Sentry.captureException(error, { tags: { order_id: orderId, restaurant_id: restaurantId } })
     console.error('[orders.status.PATCH] error:', error)
     return NextResponse.json({ error: 'Failed to update order status' }, { status: 500 })
   }

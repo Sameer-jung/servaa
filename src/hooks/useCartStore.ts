@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import posthog from 'posthog-js'
 import { CartState, CartItem, MenuItem, Modifier } from '@/types'
 import { calculateItemTotal } from '@/utils/pricing'
 
@@ -63,6 +64,13 @@ export const useCartStore = create<CartStore>()(
 
       addItem: (menuItem: MenuItem, quantity = 1, notes = '', modifiers: Modifier[] = []) => {
         set((state) => {
+          posthog.capture('item_added_to_cart', {
+            restaurant_id: state.restaurantId,
+            table_id: state.tableId,
+            menu_item_id: menuItem.id,
+            quantity,
+          })
+
           const cartItemId = createCartItemId(menuItem.id, modifiers)
           const existing = state.items.find(
             (item) => item.cartItemId === cartItemId

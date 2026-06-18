@@ -1,11 +1,14 @@
     import { NextResponse } from "next/server";
+    import * as Sentry from "@sentry/nextjs";
+    import "@/lib/sentry";
     import { supabaseAdmin } from "@/lib/supabase/admin";
     import { isUuid, readTrimmedString } from "@/utils/validation";
 
     export async function GET(request: Request) {
+    let tableId: string | null = null
     try {
         const { searchParams } = new URL(request.url);
-        const tableId = searchParams.get("tableId");
+        tableId = searchParams.get("tableId");
         const customerSessionId = readTrimmedString(
         searchParams.get("customerSessionId"),
         128,
@@ -29,6 +32,7 @@
         .maybeSingle();
 
         if (error) {
+        Sentry.captureException(error, { tags: { table_id: tableId } });
         console.error("[orders.session.GET] order lookup error:", error.message);
         return NextResponse.json(
             { error: "Could not load active order." },
@@ -38,6 +42,7 @@
 
         return NextResponse.json({ order: order || null });
     } catch (error) {
+        Sentry.captureException(error, { tags: { table_id: tableId } });
         console.error("[orders.session.GET] error:", error);
         return NextResponse.json(
         { error: "Failed to load active order" },
