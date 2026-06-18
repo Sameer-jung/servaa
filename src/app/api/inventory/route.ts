@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/utils/audit'
 import { hasRestaurantAccess } from '@/utils/roles'
+import { DEFAULT_INVENTORY_CATEGORIES, findCanonicalCategory } from '@/utils/inventory'
 import {
   isUuid,
   readTrimmedString,
@@ -10,6 +11,41 @@ import {
   validatePrice,
   validateQuantity,
 } from '@/utils/validation'
+
+// Resolve a raw (already-trimmed) category to its canonical casing, persisting
+// brand-new custom categories so they appear in the dropdown for every future
+// item. De-dupes case-insensitively against defaults first, then existing
+// custom categories — so "spices" never creates a second "Spices".
+async function resolveCategory(
+  restaurantId: string,
+  rawCategory: string | null
+): Promise<string | null> {
+  if (!rawCategory) return null
+
+  const defaultMatch = findCanonicalCategory(rawCategory, [...DEFAULT_INVENTORY_CATEGORIES])
+  if (defaultMatch) return defaultMatch
+
+  const { data: existing } = await supabaseAdmin
+    .from('inventory_categories')
+    .select('name')
+    .eq('restaurant_id', restaurantId)
+
+  const customMatch = findCanonicalCategory(
+    rawCategory,
+    (existing ?? []).map((r) => r.name as string)
+  )
+  if (customMatch) return customMatch
+
+  // New custom category — persist it. Ignore unique-violation races (the
+  // functional lower(name) index guarantees only one row survives).
+  const { error } = await supabaseAdmin
+    .from('inventory_categories')
+    .insert({ restaurant_id: restaurantId, name: rawCategory })
+  if (error && error.code !== '23505') {
+    console.error('[inventory.resolveCategory] insert error:', error.message)
+  }
+  return rawCategory
+}
 
 export async function GET(request: Request) {
   try {
@@ -72,7 +108,7 @@ export async function POST(request: Request) {
     const costPerUnit = body.cost_per_unit == null || body.cost_per_unit === ''
       ? null
       : validatePrice(body.cost_per_unit)
-    const category = body.category ? readTrimmedString(body.category, 60) : null
+    const rawCategory = body.category ? readTrimmedString(body.category, 60) : null
 
     if (!name || !unit || reorderThreshold === null) {
       return NextResponse.json({ error: 'Invalid inventory item' }, { status: 400 })
@@ -91,6 +127,8 @@ export async function POST(request: Request) {
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    const category = await resolveCategory(restaurantId, rawCategory)
 
     const { data: item, error } = await supabaseAdmin
       .from('inventory_items')
@@ -164,7 +202,8 @@ export async function PATCH(request: Request) {
       updates.unit = unit
     }
     if (body.category !== undefined) {
-      updates.category = body.category ? readTrimmedString(body.category, 60) : null
+      const rawCategory = body.category ? readTrimmedString(body.category, 60) : null
+      updates.category = await resolveCategory(restaurantId, rawCategory)
     }
     if (body.reorder_threshold !== undefined) {
       const threshold = validateQuantity(body.reorder_threshold)

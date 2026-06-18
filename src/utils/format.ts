@@ -27,6 +27,15 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+// Time-of-day in the viewer's local timezone (e.g. "3:42 PM"). Pair with a
+// date group header so the row only needs to show when, not the full date.
+export function formatTime(date: string | Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
 export function formatTimeAgo(date: string | Date): string {
   const now = new Date()
   const then = new Date(date)

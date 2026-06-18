@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { Card, CardContent } from '@/components/ui/Card'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { formatCurrency, formatTime } from '@/utils/format'
 import type { Expense, ExpenseCategory } from '@/types'
 
 type Period = 'today' | 'week' | 'month' | 'custom'
@@ -57,6 +57,24 @@ function toDateInput(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// Parse a YYYY-MM-DD expense_date as a LOCAL calendar date. Using new Date(str)
+// would parse it as UTC midnight and shift the day in non-UTC timezones.
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
+// Section header for an expense_date: "Today", "Yesterday", else "18 June 2026".
+function dateGroupLabel(dateStr: string): string {
+  const date = parseLocalDate(dateStr)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((today.getTime() - date.getTime()) / 86_400_000)
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
+}
+
 function ExpensesContent() {
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const { isOwner, loading: roleLoading } = useRole(restaurant?.id)
@@ -95,8 +113,20 @@ function ExpensesContent() {
     const toDate = toDateInput(rangeEnd)
     const supabase = createClient()
 
+    // Read expenses directly from Supabase (RLS owner-gated) alongside the
+    // revenue query — the same single-round-trip pattern the orders page uses,
+    // instead of the slower API-route + server re-auth path. Mutations still go
+    // through /api/expenses.
     const [expenseRes, revenueRes] = await Promise.all([
-      fetch(`/api/expenses?restaurantId=${encodeURIComponent(restaurant.id)}&from=${fromDate}&to=${toDate}&pageSize=100`),
+      supabase
+        .from('expenses')
+        .select('*, movements:stock_movements(quantity_delta, inventory_item:inventory_items(name, unit))')
+        .eq('restaurant_id', restaurant.id)
+        .gte('expense_date', fromDate)
+        .lte('expense_date', toDate)
+        .order('expense_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(100),
       supabase
         .from('orders')
         .select('id, total_amount, special_instructions')
@@ -106,12 +136,11 @@ function ExpensesContent() {
         .lte('created_at', rangeEnd.toISOString()),
     ])
 
-    const expenseData = await expenseRes.json().catch(() => null)
-    if (!expenseRes.ok) {
-      toast.error(expenseData?.error || 'Failed to load expenses')
+    if (expenseRes.error) {
+      toast.error('Failed to load expenses')
       setExpenses([])
     } else {
-      setExpenses((expenseData?.expenses as ExpenseRow[]) || [])
+      setExpenses((expenseRes.data as ExpenseRow[]) || [])
     }
 
     const completed = ((revenueRes.data as { total_amount: number | null; special_instructions?: string | null }[] | null) ?? [])
@@ -171,6 +200,25 @@ function ExpensesContent() {
     )
   })
   const visibleTotal = visibleExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
+
+  // Group the (already newest-first) expenses under Today / Yesterday / date
+  // headers. Consecutive grouping works because the query sorts by expense_date
+  // desc, then created_at desc.
+  const groupedExpenses: { key: string; label: string; items: ExpenseRow[]; total: number }[] = []
+  for (const e of visibleExpenses) {
+    const last = groupedExpenses[groupedExpenses.length - 1]
+    if (last && last.key === e.expense_date) {
+      last.items.push(e)
+      last.total += Number(e.amount)
+    } else {
+      groupedExpenses.push({
+        key: e.expense_date,
+        label: dateGroupLabel(e.expense_date),
+        items: [e],
+        total: Number(e.amount),
+      })
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -298,55 +346,66 @@ function ExpensesContent() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-800">
+        <div className="space-y-3">
+          {/* Filtered summary */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {payFilter === 'all' ? 'All payments' : `${payFilter} payments`} · {visibleExpenses.length}
             </span>
             <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{formatCurrency(visibleTotal, currency)}</span>
           </div>
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {visibleExpenses.map((e) => {
-              const linked = e.movements && e.movements.length > 0 ? e.movements[0] : null
-              const itemName = linked?.inventory_item?.name ?? null
-              const qtyText = linked
-                ? `${Number(linked.quantity_delta)} ${linked.inventory_item?.unit ?? ''}`.trim()
-                : null
-              const title = itemName || e.category
-              return (
-              <div key={e.id} className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">{title}</span>
-                    {itemName && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                        {e.category}
-                      </span>
-                    )}
-                    {e.source === 'inventory_purchase' && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                        from stock
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 truncate text-xs font-medium text-gray-500 dark:text-gray-400">
-                    {formatDate(e.expense_date)}
-                    {qtyText ? ` · ${qtyText}` : ''}
-                    {e.vendor ? ` · ${e.vendor}` : ''}
-                    {e.note ? ` · ${e.note}` : ''}
-                  </p>
-                </div>
-                <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(Number(e.amount), currency)}
-                </p>
-                <div className="flex flex-shrink-0 gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => { setEditing(e); setModalOpen(true) }}>Edit</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleting(e)}>Delete</Button>
-                </div>
+
+          {/* Date-grouped list */}
+          {groupedExpenses.map((group) => (
+            <div key={group.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+              <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2 dark:border-gray-800 dark:bg-gray-950">
+                <span className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">{group.label}</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{formatCurrency(group.total, currency)}</span>
               </div>
-              )
-            })}
-          </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {group.items.map((e) => {
+                  const linked = e.movements && e.movements.length > 0 ? e.movements[0] : null
+                  const itemName = linked?.inventory_item?.name ?? null
+                  const qtyText = linked
+                    ? `${Number(linked.quantity_delta)} ${linked.inventory_item?.unit ?? ''}`.trim()
+                    : null
+                  const title = itemName || e.category
+                  return (
+                  <div key={e.id} className="flex flex-wrap items-center gap-3 p-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">{title}</span>
+                        {itemName && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                            {e.category}
+                          </span>
+                        )}
+                        {e.source === 'inventory_purchase' && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                            from stock
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {formatTime(e.created_at)}
+                        {qtyText ? ` · ${qtyText}` : ''}
+                        {e.vendor ? ` · ${e.vendor}` : ''}
+                        {e.note ? ` · ${e.note}` : ''}
+                      </p>
+                    </div>
+                    <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
+                      {formatCurrency(Number(e.amount), currency)}
+                    </p>
+                    <div className="flex w-full flex-shrink-0 justify-end gap-1 sm:w-auto">
+                      <Button size="sm" variant="ghost" onClick={() => { setEditing(e); setModalOpen(true) }}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleting(e)}>Delete</Button>
+                    </div>
+                  </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

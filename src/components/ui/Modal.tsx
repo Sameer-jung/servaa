@@ -23,7 +23,7 @@ export function Modal({ isOpen, onClose, title, children, className, titleClassN
       />
       <div
         className={cn(
-          'relative z-10 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900',
+          'relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900',
           className
         )}
       >
