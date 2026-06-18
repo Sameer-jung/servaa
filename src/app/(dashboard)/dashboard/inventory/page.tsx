@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import toast from 'react-hot-toast'
-import { AlertTriangle, Boxes, ClipboardCheck, MinusCircle, PackagePlus, Plus, PlusCircle } from 'lucide-react'
+import { AlertTriangle, ArchiveRestore, Boxes, ClipboardCheck, MinusCircle, PackagePlus, Plus, PlusCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { useRole } from '@/hooks/useRole'
 import { PageLoading } from '@/components/dashboard/PageLoading'
@@ -13,26 +14,13 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { mergeInventoryCategories } from '@/utils/inventory'
 import type { InventoryItem, InventoryUnit, StockMovement } from '@/types'
 
 const UNIT_OPTIONS: InventoryUnit[] = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'packet', 'other']
 
-// Restaurant stockroom categories — a practical set covering most kitchens.
-const INVENTORY_CATEGORIES = [
-  'Vegetables',
-  'Fruits',
-  'Meat & Poultry',
-  'Seafood',
-  'Dairy & Eggs',
-  'Grains & Staples',
-  'Spices & Condiments',
-  'Oils & Sauces',
-  'Beverages',
-  'Alcohol',
-  'Packaging & Disposables',
-  'Cleaning & Supplies',
-  'Other',
-]
+// Sentinel select value that reveals the "type a new category" text input.
+const OTHER_CATEGORY = '__other__'
 
 function isLowStock(item: InventoryItem) {
   return item.reorder_threshold > 0 && item.current_quantity <= item.reorder_threshold
@@ -42,9 +30,14 @@ function InventoryContent() {
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const { isOwner } = useRole(restaurant?.id)
   const currency = restaurant?.currency || 'NPR'
+  const supabase = createClient()
 
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [customCategories, setCustomCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'active' | 'archived'>('active')
+  const [archivedItems, setArchivedItems] = useState<InventoryItem[]>([])
+  const [archivedLoading, setArchivedLoading] = useState(false)
   const [lowStockOnly, setLowStockOnly] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -55,28 +48,70 @@ function InventoryContent() {
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null)
   const [archivingItem, setArchivingItem] = useState<InventoryItem | null>(null)
   const [archiveBusy, setArchiveBusy] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
 
-  const fetchItems = useCallback(async () => {
+  // Active items + the restaurant's custom categories, read directly from
+  // Supabase (RLS-gated) in parallel — the same fast pattern the orders page
+  // uses, avoiding the extra API-route hop and redundant server re-auth.
+  const fetchActive = useCallback(async () => {
     if (!restaurant) {
       setItems([])
+      setCustomCategories([])
       setLoading(false)
       return
     }
     setLoading(true)
-    const res = await fetch(`/api/inventory?restaurantId=${encodeURIComponent(restaurant.id)}`)
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      toast.error(data?.error || 'Failed to load inventory')
+    const [itemsRes, catsRes] = await Promise.all([
+      supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .eq('is_active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('inventory_categories')
+        .select('name')
+        .eq('restaurant_id', restaurant.id),
+    ])
+    if (itemsRes.error) {
+      toast.error('Failed to load inventory')
       setItems([])
     } else {
-      setItems((data?.items as InventoryItem[]) || [])
+      setItems((itemsRes.data as InventoryItem[]) || [])
     }
+    setCustomCategories(((catsRes.data as { name: string }[] | null) ?? []).map((r) => r.name))
     setLoading(false)
-  }, [restaurant])
+  }, [restaurant, supabase])
+
+  const fetchArchived = useCallback(async () => {
+    if (!restaurant) {
+      setArchivedItems([])
+      return
+    }
+    setArchivedLoading(true)
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .eq('restaurant_id', restaurant.id)
+      .eq('is_active', false)
+      .order('name', { ascending: true })
+    if (error) {
+      toast.error('Failed to load archived items')
+      setArchivedItems([])
+    } else {
+      setArchivedItems((data as InventoryItem[]) || [])
+    }
+    setArchivedLoading(false)
+  }, [restaurant, supabase])
 
   useEffect(() => {
-    fetchItems()
-  }, [fetchItems])
+    fetchActive()
+  }, [fetchActive])
+
+  // Lazy-load the archived list only when that tab is opened.
+  useEffect(() => {
+    if (view === 'archived') fetchArchived()
+  }, [view, fetchArchived])
 
   const handleArchive = async () => {
     if (!archivingItem || !restaurant) return
@@ -94,7 +129,30 @@ function InventoryContent() {
     }
     toast.success('Item archived')
     setArchivingItem(null)
-    fetchItems()
+    // Item leaves the active list (and stats); the archived list refetches when opened.
+    fetchActive()
+  }
+
+  // Restore (un-archive) flips is_active back to true through the same PATCH
+  // path archiving uses — same row, same RLS/role rules, no data loss.
+  const handleRestore = async (item: InventoryItem) => {
+    if (!restaurant) return
+    setRestoringId(item.id)
+    const res = await fetch('/api/inventory', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: item.id, restaurantId: restaurant.id, is_active: true }),
+    })
+    setRestoringId(null)
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      toast.error(data?.error || 'Could not restore item')
+      return
+    }
+    toast.success('Item restored')
+    // Returns to active (stats + list) and leaves the archived list.
+    fetchActive()
+    fetchArchived()
   }
 
   if (restaurantLoading || loading) return <PageLoading />
@@ -107,14 +165,16 @@ function InventoryContent() {
   const categoryOf = (item: InventoryItem) => item.category?.trim() || 'Uncategorized'
   const categories = Array.from(new Set(items.map(categoryOf))).sort((a, b) => a.localeCompare(b))
 
+  const matchesQuery = (item: InventoryItem) =>
+    !query ||
+    item.name.toLowerCase().includes(query) ||
+    (item.category ?? '').toLowerCase().includes(query)
+
   const visibleItems = baseItems.filter((item) => {
     if (categoryFilter !== 'all' && categoryOf(item) !== categoryFilter) return false
-    if (!query) return true
-    return (
-      item.name.toLowerCase().includes(query) ||
-      (item.category ?? '').toLowerCase().includes(query)
-    )
+    return matchesQuery(item)
   })
+  const visibleArchived = archivedItems.filter(matchesQuery)
   const stockValue = items.reduce(
     (sum, item) => sum + Number(item.current_quantity) * Number(item.cost_per_unit ?? 0),
     0
@@ -155,142 +215,230 @@ function InventoryContent() {
         />
       </div>
 
-      {items.length > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="w-full sm:max-w-xs">
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search items by name…"
+      {/* Active / Archived view switch */}
+      <div className="flex w-fit overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+        {(
+          [
+            { key: 'active' as const, label: 'Active' },
+            { key: 'archived' as const, label: 'Archived' },
+          ]
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setView(tab.key)}
+            className={`px-4 py-1.5 text-xs font-semibold transition-colors ${
+              view === tab.key
+                ? 'bg-brand-600 text-white'
+                : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'active' ? (
+        <>
+          {items.length > 0 && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="w-full sm:max-w-xs">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search items by name…"
+                />
+              </div>
+              <div className="flex w-fit overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                {(
+                  [
+                    { key: false, label: `All (${items.length})` },
+                    { key: true, label: `Low stock (${lowStockItems.length})` },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={String(tab.key)}
+                    type="button"
+                    onClick={() => setLowStockOnly(tab.key)}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      lowStockOnly === tab.key
+                        ? 'bg-brand-600 text-white'
+                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Category chips — single row, scrolls horizontally when it overflows
+              (same pattern as the orders tab bar) so it stays compact on phones. */}
+          {categories.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {(['all', ...categories]).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                    categoryFilter === cat
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {cat === 'all' ? 'All categories' : cat}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {visibleItems.length === 0 ? (
+            <EmptyState
+              title={
+                query
+                  ? 'No items match your search'
+                  : categoryFilter !== 'all'
+                    ? `No items in “${categoryFilter}”`
+                    : lowStockOnly
+                      ? 'No low-stock items'
+                      : 'No inventory items yet'
+              }
+              description={
+                query
+                  ? `Nothing matches “${search.trim()}”.`
+                  : categoryFilter !== 'all'
+                    ? 'Try another category, or add an item here.'
+                    : lowStockOnly
+                      ? 'Everything is above its reorder threshold.'
+                      : 'Add the ingredients and supplies you want to keep an eye on.'
+              }
+              action={
+                !lowStockOnly && !query && categoryFilter === 'all' ? (
+                  <Button onClick={() => { setEditingItem(null); setItemModalOpen(true) }}>
+                    <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                  </Button>
+                ) : undefined
+              }
             />
-          </div>
-          <div className="flex w-fit overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-            {(
-              [
-                { key: false, label: `All (${items.length})` },
-                { key: true, label: `Low stock (${lowStockItems.length})` },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={String(tab.key)}
-                type="button"
-                onClick={() => setLowStockOnly(tab.key)}
-                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  lowStockOnly === tab.key
-                    ? 'bg-brand-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {visibleItems.map((item) => {
+                  const low = isLowStock(item)
+                  return (
+                    <div key={item.id} className="flex flex-wrap items-center gap-3 p-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {item.name}
+                          </span>
+                          {low && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                              <AlertTriangle className="h-3 w-3" /> Low
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                          {item.category || 'Uncategorized'}
+                          {item.reorder_threshold > 0 && ` · reorder at ${item.reorder_threshold} ${item.unit}`}
+                        </p>
+                      </div>
 
-      {/* Category chips */}
-      {categories.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {(['all', ...categories]).map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setCategoryFilter(cat)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                categoryFilter === cat
-                  ? 'bg-brand-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              {cat === 'all' ? 'All categories' : cat}
-            </button>
-          ))}
-        </div>
-      )}
+                      <div className="text-right">
+                        <p className={`text-base font-bold ${low ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                          {Number(item.current_quantity)} <span className="text-xs font-medium text-gray-400">{item.unit}</span>
+                        </p>
+                        {item.cost_per_unit != null && (
+                          <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
+                            {formatCurrency(Number(item.cost_per_unit), currency)}/{item.unit}
+                          </p>
+                        )}
+                      </div>
 
-      {visibleItems.length === 0 ? (
-        <EmptyState
-          title={
-            query
-              ? 'No items match your search'
-              : categoryFilter !== 'all'
-                ? `No items in “${categoryFilter}”`
-                : lowStockOnly
-                  ? 'No low-stock items'
-                  : 'No inventory items yet'
-          }
-          description={
-            query
-              ? `Nothing matches “${search.trim()}”.`
-              : categoryFilter !== 'all'
-                ? 'Try another category, or add an item here.'
-                : lowStockOnly
-                  ? 'Everything is above its reorder threshold.'
-                  : 'Add the ingredients and supplies you want to keep an eye on.'
-          }
-          action={
-            !lowStockOnly && !query && categoryFilter === 'all' ? (
-              <Button onClick={() => { setEditingItem(null); setItemModalOpen(true) }}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Item
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {visibleItems.map((item) => {
-              const low = isLowStock(item)
-              return (
-                <div key={item.id} className="flex flex-wrap items-center gap-3 p-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {item.name}
-                      </span>
-                      {low && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                          <AlertTriangle className="h-3 w-3" /> Low
-                        </span>
-                      )}
+                      <div className="flex w-full gap-2 sm:w-auto">
+                        <Button size="sm" onClick={() => setMovementItem(item)}>
+                          Update stock
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setHistoryItem(item)}>
+                          History
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { setEditingItem(item); setItemModalOpen(true) }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
                     </div>
-                    <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                      {item.category || 'Uncategorized'}
-                      {item.reorder_threshold > 0 && ` · reorder at ${item.reorder_threshold} ${item.unit}`}
-                    </p>
-                  </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {archivedItems.length > 0 && (
+            <div className="w-full sm:max-w-xs">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search archived items…"
+              />
+            </div>
+          )}
 
-                  <div className="text-right">
-                    <p className={`text-base font-bold ${low ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                      {Number(item.current_quantity)} <span className="text-xs font-medium text-gray-400">{item.unit}</span>
-                    </p>
-                    {item.cost_per_unit != null && (
-                      <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
-                        {formatCurrency(Number(item.cost_per_unit), currency)}/{item.unit}
+          {archivedLoading ? (
+            <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+          ) : visibleArchived.length === 0 ? (
+            <EmptyState
+              title={query ? 'No archived items match your search' : 'No archived items'}
+              description={
+                query
+                  ? `Nothing matches “${search.trim()}”.`
+                  : 'Items you archive will appear here, ready to restore.'
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {visibleArchived.map((item) => (
+                  <div key={item.id} className="flex flex-wrap items-center gap-3 p-4 opacity-80">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          {item.name}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                          Archived
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {item.category || 'Uncategorized'} · last known {Number(item.current_quantity)} {item.unit}
                       </p>
-                    )}
-                  </div>
+                    </div>
 
-                  <div className="flex w-full gap-2 sm:w-auto">
-                    <Button size="sm" onClick={() => setMovementItem(item)}>
-                      Update stock
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setHistoryItem(item)}>
-                      History
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => { setEditingItem(item); setItemModalOpen(true) }}
-                    >
-                      Edit
-                    </Button>
+                    <div className="flex w-full gap-2 sm:w-auto">
+                      <Button size="sm" variant="outline" onClick={() => setHistoryItem(item)}>
+                        History
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleRestore(item)}
+                        isLoading={restoringId === item.id}
+                      >
+                        <ArchiveRestore className="mr-1.5 h-4 w-4" /> Restore
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {restaurant && (
@@ -299,8 +447,9 @@ function InventoryContent() {
           onClose={() => setItemModalOpen(false)}
           restaurantId={restaurant.id}
           item={editingItem}
+          categories={mergeInventoryCategories(customCategories)}
           onArchive={() => { setItemModalOpen(false); setArchivingItem(editingItem) }}
-          onSaved={() => { setItemModalOpen(false); fetchItems() }}
+          onSaved={() => { setItemModalOpen(false); fetchActive() }}
         />
       )}
 
@@ -312,7 +461,7 @@ function InventoryContent() {
           item={movementItem}
           canLogExpense={isOwner}
           currency={currency}
-          onSaved={() => { setMovementItem(null); fetchItems() }}
+          onSaved={() => { setMovementItem(null); fetchActive() }}
         />
       )}
 
@@ -344,6 +493,7 @@ function ItemModal({
   onClose,
   restaurantId,
   item,
+  categories,
   onArchive,
   onSaved,
 }: {
@@ -351,15 +501,18 @@ function ItemModal({
   onClose: () => void
   restaurantId: string
   item: InventoryItem | null
+  categories: string[]
   onArchive: () => void
   onSaved: () => void
 }) {
   const [name, setName] = useState('')
   const [unit, setUnit] = useState<InventoryUnit>('piece')
   const [category, setCategory] = useState('')
+  // Free-text value shown when "Other" is selected in the category dropdown.
+  const [customCategory, setCustomCategory] = useState('')
   const [threshold, setThreshold] = useState('')
   const [cost, setCost] = useState('')
-  const [errors, setErrors] = useState<{ name?: string; threshold?: string; cost?: string }>({})
+  const [errors, setErrors] = useState<{ name?: string; threshold?: string; cost?: string; category?: string }>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -367,18 +520,23 @@ function ItemModal({
       setName(item?.name ?? '')
       setUnit(item?.unit ?? 'piece')
       setCategory(item?.category ?? '')
+      setCustomCategory('')
       setThreshold(item ? String(item.reorder_threshold) : '')
       setCost(item?.cost_per_unit != null ? String(item.cost_per_unit) : '')
       setErrors({})
     }
   }, [isOpen, item])
 
+  const isOther = category === OTHER_CATEGORY
+
   const validate = () => {
-    const next: { name?: string; threshold?: string; cost?: string } = {}
+    const next: { name?: string; threshold?: string; cost?: string; category?: string } = {}
     const trimmedName = name.trim()
     if (!trimmedName) next.name = 'Name is required'
     else if (trimmedName.length < 2) next.name = 'Name is too short'
     else if (trimmedName.length > 120) next.name = 'Name is too long (max 120)'
+
+    if (isOther && !customCategory.trim()) next.category = 'Enter a category name'
 
     if (threshold.trim() !== '') {
       const t = Number(threshold)
@@ -400,11 +558,13 @@ function ItemModal({
     setErrors(next)
     if (Object.keys(next).length > 0) return
     setSaving(true)
+    // "Other" sends the typed name; the server canonicalises + persists it.
+    const resolvedCategory = isOther ? customCategory.trim() : category.trim()
     const payload = {
       restaurantId,
       name: name.trim(),
       unit,
-      category: category.trim() || null,
+      category: resolvedCategory || null,
       reorder_threshold: threshold === '' ? 0 : Number(threshold),
       cost_per_unit: cost === '' ? null : Number(cost),
     }
@@ -451,19 +611,32 @@ function ItemModal({
             <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Category</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => { setCategory(e.target.value); setErrors((p) => ({ ...p, category: undefined })) }}
               className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value="">Uncategorized</option>
-              {INVENTORY_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
-              {category && !INVENTORY_CATEGORIES.includes(category) && (
+              {/* An existing item may carry a category not in the merged list (e.g. legacy). */}
+              {category && category !== OTHER_CATEGORY && !categories.includes(category) && (
                 <option value={category}>{category}</option>
               )}
+              <option value={OTHER_CATEGORY}>+ Add new category…</option>
             </select>
           </div>
         </div>
+        {isOther && (
+          <Input
+            label="New category name"
+            value={customCategory}
+            maxLength={60}
+            autoFocus
+            onChange={(e) => { setCustomCategory(e.target.value); setErrors((p) => ({ ...p, category: undefined })) }}
+            placeholder="e.g. Bakery"
+            error={errors.category}
+          />
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Input
             label="Reorder threshold"

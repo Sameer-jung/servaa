@@ -96,6 +96,9 @@ Manual stock tracking and expense logging, added in `004_inventory_expenses.sql`
 - **RBAC**: inventory is staff-level (`is_restaurant_staff`); **expenses are owner-only** (`is_restaurant_owner` in RLS, `isOwner` in the API). The UI hides the Expenses nav item and gates the page for non-owners via `useRole` (`src/hooks/useRole.ts`) — but the server check is authoritative.
 - **Money report**: the Expenses page computes Revenue (completed `orders.total_amount`, service-requests filtered) − Expenses = Net for today/week/month, reusing the analytics donut pattern.
 - **Decoupled from orders**: inventory does not auto-deplete on order completion in V1 — this is intentional. Recipe links / auto-depletion are explicitly deferred.
+- **Custom categories**: item categories are a per-restaurant extensible list — fixed defaults (`DEFAULT_INVENTORY_CATEGORIES` in `src/utils/inventory.ts`) plus custom ones stored in `inventory_categories` (005 migration). Picking "Other" on the Add Item form reveals a text input; the inventory API route (`resolveCategory`) canonicalises the name (case-insensitive against defaults then existing custom) and persists genuinely-new ones on item save. Do not reintroduce a hardcoded category enum in the page.
+- **Archived items**: the inventory page has an Active/Archived view toggle. Archiving sets `is_active=false` (PATCH `/api/inventory`); Restore flips it back via the same PATCH. Stat cards / low-stock counts derive from active items only.
+- **Page reads are direct client queries**: the Inventory and Expenses pages read their lists by querying Supabase directly from the client (RLS-gated), the same fast pattern as the orders page — NOT through the `/api/inventory` or `/api/expenses` GET routes (those still exist and back any server-side use). All mutations still go through the API routes. Expense row times use `created_at` via `formatTime` (the `expense_date` DATE column has no time-of-day and rendered shifted); expenses are grouped under Today/Yesterday/date headers by local-parsed `expense_date`.
 
 ### Database setup (fresh)
 
@@ -110,6 +113,7 @@ Run in order:
 7. `database/003_item_name_snapshot.sql`
 8. `database/fix_duplicate_invoices.sql` (adds the `UNIQUE(order_id)` constraint on `invoices` that the invoices API relies on for idempotency — **not** present in `schema.sql`)
 9. `database/004_inventory_expenses.sql`
+10. `database/005_inventory_categories.sql` (per-restaurant custom inventory categories — adds the `inventory_categories` table + case-insensitive unique index + staff RLS)
 
 **Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
 
