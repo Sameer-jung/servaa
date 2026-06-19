@@ -2,7 +2,7 @@
 
 import { toast } from "react-hot-toast"
 import { MESSAGES } from "@/utils/messages"
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -663,6 +663,7 @@ interface TableOrderCardProps {
   onAccept: (orderId: string) => void
   onReject: (orderId: string) => void
   onUpdateStatus: (orderId: string, status: string) => void
+  onSkipToCompleted: (orderId: string) => void
   onCancelItem: (itemId: string, orderId: string) => void
   onAcceptAll: (group: TableOrderGroup) => Promise<void>
   onRejectAll: (group: TableOrderGroup) => Promise<void>
@@ -678,6 +679,7 @@ function TableOrderCard({
   onAccept,
   onReject,
   onUpdateStatus,
+  onSkipToCompleted,
   onCancelItem,
   onAcceptAll,
   onRejectAll,
@@ -762,6 +764,7 @@ function TableOrderCard({
                 onAccept={() => onAccept(order.id)}
                 onReject={() => onReject(order.id)}
                 onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+                onSkipToCompleted={() => onSkipToCompleted(order.id)}
                 onCancelItem={(itemId) => onCancelItem(itemId, order.id)}
                 currency={currency}
                 isLoading={updatingOrderId === order.id}
@@ -904,7 +907,13 @@ function OrdersContent() {
     setPage(0)
   }
 
+  // Orders mid skip-to-completed: their intermediate (preparing/ready) realtime
+  // updates are expected and shouldn't overwrite the optimistic "completed" state.
+  const skippingOrderIdsRef = useRef<Set<string>>(new Set())
+
   useRealtimeOrders(restaurant?.id || '', useCallback((update) => {
+    if (skippingOrderIdsRef.current.has(update.orderId)) return
+
     if (update.type === 'DELETE') {
       setOrders((prev) => prev.filter((o) => o.id !== update.orderId))
       return
@@ -1015,6 +1024,45 @@ function OrdersContent() {
 
     void fetchStatusCounts()
     setUpdatingOrderId(null)
+  }
+
+  const handleSkipToCompleted = async (orderId: string) => {
+    if (updatingOrderId) return
+    setUpdatingOrderId(orderId)
+    skippingOrderIdsRef.current.add(orderId)
+
+    try {
+      const order = orders.find((o) => o.id === orderId)
+      const kitchenSteps: OrderStatus[] = ['accepted', 'preparing', 'ready']
+      const startIndex = kitchenSteps.indexOf(order?.status as OrderStatus)
+      const remainingSteps = startIndex === -1 ? [] : [...kitchenSteps.slice(startIndex + 1), 'completed' as OrderStatus]
+
+      applyOptimisticStatus(orderId, 'completed')
+
+      for (const step of remainingSteps) {
+        const ok = await updateOrderStatus(orderId, step)
+        if (!ok) {
+          fetchOrders()
+          toast.error(MESSAGES.staffOrder.updateFailed)
+          return
+        }
+      }
+
+      if (restaurant) {
+        const response = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, restaurantId: restaurant.id }),
+        })
+        if (!response.ok) fetchOrders()
+      }
+
+      toast.success(MESSAGES.staffOrder.completed)
+      void fetchStatusCounts()
+    } finally {
+      skippingOrderIdsRef.current.delete(orderId)
+      setUpdatingOrderId(null)
+    }
   }
 
   const handleCancelItem = async (itemId: string, orderId: string) => {
@@ -1144,7 +1192,7 @@ function OrdersContent() {
       {/* Orders grid */}
       {tableGroups.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
             {tableGroups.map((group) => (
               <TableOrderCard
                 key={group.tableId}
@@ -1157,6 +1205,7 @@ function OrdersContent() {
                 onAccept={handleAccept}
                 onReject={handleReject}
                 onUpdateStatus={handleUpdateStatus}
+                onSkipToCompleted={handleSkipToCompleted}
                 onCancelItem={handleCancelItem}
                 onAcceptAll={handleAcceptAll}
                 onRejectAll={handleRejectAll}
