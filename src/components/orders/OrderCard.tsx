@@ -12,6 +12,7 @@ interface OrderCardProps {
   onAccept?: () => void
   onReject?: () => void
   onUpdateStatus?: (status: string) => void
+  onSkipToCompleted?: () => void
   onCancelItem?: (itemId: string) => void
   compact?: boolean
   currency?: string
@@ -47,7 +48,7 @@ function getItemSummary(order: OrderWithItems) {
     : visibleItems.join(', ')
 }
 
-export function OrderCard({ order, onAccept, onReject, onUpdateStatus, onCancelItem, compact, currency, isLoading = false, cancellingItemId }: OrderCardProps) {
+export function OrderCard({ order, onAccept, onReject, onUpdateStatus, onSkipToCompleted, onCancelItem, compact, currency, isLoading = false, cancellingItemId }: OrderCardProps) {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null)
   const action = statusActions[order.status]
   const tableNumber = order.table?.table_number || 'Unknown'
@@ -194,6 +195,18 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, onCancelI
             onClick={() => onUpdateStatus(action.next)}
           >
             {action.label}
+          </Button>
+        )}
+        {(order.status === 'accepted' || order.status === 'preparing') && onSkipToCompleted && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-shrink-0 border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+            disabled={isLoading}
+            onClick={onSkipToCompleted}
+            title="Skip preparing/ready and mark this order completed"
+          >
+            Skip to Completed
           </Button>
         )}
         {isCancellable && order.status !== 'pending' && onReject && (
