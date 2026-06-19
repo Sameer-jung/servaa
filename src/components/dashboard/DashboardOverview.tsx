@@ -366,7 +366,7 @@ export function DashboardOverview({ restaurantId, currency }: DashboardOverviewP
                           <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 text-sm">
                             <span className="font-semibold text-gray-900 dark:text-gray-100">{item.quantity}x</span>
                             <span className="min-w-0 break-words font-medium text-gray-600 dark:text-gray-300">
-                              {item.menu_item?.name || 'Item'}
+                              {item.item_name_snapshot || item.menu_item?.name || 'Item'}
                             </span>
                             <span className="font-semibold text-gray-900 dark:text-gray-100">
                               {formatCurrency((item.price_snapshot || 0) * item.quantity, currency)}

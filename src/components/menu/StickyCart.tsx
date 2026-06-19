@@ -2,6 +2,7 @@
 import {toast} from "react-hot-toast"
 import {MESSAGES} from "@/utils/messages"
 import { useState } from 'react'
+import posthog from 'posthog-js'
 import { useCartStore } from '@/hooks/useCartStore'
 import { formatCurrency } from '@/utils/format'
 import { Button } from '@/components/ui/Button'
@@ -62,6 +63,13 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
       const result = await response.json().catch(() => null)
 
       if (response.ok && result?.order) {
+        posthog.capture('order_placed', {
+          restaurant_id: restaurantId,
+          table_id: tableId,
+          order_id: result.order.id,
+          item_count: cart.totalItems,
+          total_amount: cart.totalPrice,
+        })
         onOrderPlaced?.(result.order as Order)
         cart.clearCart()
         setPlacing(false)
@@ -85,7 +93,7 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
 
   if (placed && cart.totalItems === 0) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-emerald-200 bg-emerald-50 p-4">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-emerald-200 bg-emerald-50 p-4 lg:hidden">
         <div className="mx-auto max-w-lg text-center">
           <p className="text-sm font-medium text-emerald-700">Order sent to the kitchen!</p>
           <button
@@ -103,7 +111,7 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
   if (cart.totalItems === 0) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white p-4 shadow-lg">
+    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white p-4 shadow-lg lg:hidden">
       <div className="mx-auto max-w-lg space-y-3">
         <div className="flex items-center justify-between">
           <div>

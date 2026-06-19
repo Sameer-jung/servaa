@@ -12,23 +12,26 @@ export async function generateQRCodeDataUrl(url: string): Promise<string> {
 }
 
 export function getAppBaseUrl(request?: Request): string {
-  if (request) {
-    const forwardedHost = request.headers.get('x-forwarded-host')
-    const host = forwardedHost || request.headers.get('host')
+  // Always prefer env vars over request headers to prevent host-header injection.
+  // A forged x-forwarded-host header could cause QR codes to point to an attacker's domain.
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
 
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '')
+  }
+
+  // Fallback to request host only in local dev where NEXT_PUBLIC_APP_URL is unset
+  if (request) {
+    const host = request.headers.get('host')
     if (host) {
-      const forwardedProto = request.headers.get('x-forwarded-proto')
-      const protocol = forwardedProto || (host.includes('localhost') ? 'http' : 'https')
+      const protocol = host.includes('localhost') ? 'http' : 'https'
       return `${protocol}://${host}`.replace(/\/$/, '')
     }
   }
 
-  const configuredUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
-    'http://localhost:3000'
-
-  return configuredUrl.replace(/\/$/, '')
+  return 'http://localhost:3000'
 }
 
 export function getTableQRUrl(slug: string, tableNumber: string, request?: Request, token?: string): string {

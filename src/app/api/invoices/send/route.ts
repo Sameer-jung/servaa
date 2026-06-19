@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/utils/audit'
 import { hasRestaurantAccess } from '@/utils/roles'
 
 export async function POST(request: Request) {
+  let invoiceId: string | undefined
+  let restaurantId: string | undefined
   try {
-    const { invoiceId } = await request.json()
+    const body = await request.json()
+    invoiceId = body.invoiceId
 
     if (!invoiceId) {
       return NextResponse.json({ error: 'Missing invoiceId' }, { status: 400 })
@@ -26,12 +31,15 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (invoiceError) {
+      Sentry.captureException(invoiceError, { tags: { invoice_id: invoiceId } })
       return NextResponse.json({ error: invoiceError.message }, { status: 500 })
     }
 
     if (!invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
+
+    restaurantId = invoice.restaurant_id
 
     const hasAccess = await hasRestaurantAccess(supabase, invoice.restaurant_id, user.id)
     if (!hasAccess) {
@@ -47,6 +55,7 @@ export async function POST(request: Request) {
       .eq('id', invoiceId)
 
     if (updateError) {
+      Sentry.captureException(updateError, { tags: { invoice_id: invoiceId, restaurant_id: restaurantId } })
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
@@ -59,7 +68,8 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { invoice_id: invoiceId, restaurant_id: restaurantId } })
     return NextResponse.json({ error: 'Failed to send invoice' }, { status: 500 })
   }
 }

@@ -29,6 +29,7 @@ interface OrderItem {
   quantity: number
   price_snapshot: number | null
   cancelled: boolean | null
+  item_name_snapshot?: string | null
   menu_item: {
     id: string
     name: string
@@ -128,6 +129,7 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [restaurantName, setRestaurantName] = useState('')
+  const [error, setError] = useState(false)
   const [revenue, setRevenue] = useState(0)
   const [totalOrders, setTotalOrders] = useState(0)
   const [cancelledOrders, setCancelledOrders] = useState(0)
@@ -148,6 +150,7 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true)
+    setError(false)
     const supabase = createClient()
 
     const { start: periodStart, end: periodEnd } = getPeriodRange(period, customRange)
@@ -171,10 +174,17 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
         .in('status', ['completed', 'cancelled']),
     ])
 
-    const completed = ((completedResult.data as CompletedOrder[] | null) ?? []).filter(
+    if (completedResult.error || allOrdersResult.error) {
+      console.error('[DashboardAnalytics] fetch error:', completedResult.error ?? allOrdersResult.error)
+      setError(true)
+      setLoading(false)
+      return
+    }
+
+    const completed = ((completedResult.data as unknown as CompletedOrder[] | null) ?? []).filter(
       (o) => !isServiceRequestOrder(o)
     )
-    const allOrders = ((allOrdersResult.data as AllOrder[] | null) ?? []).filter(
+    const allOrders = ((allOrdersResult.data as unknown as AllOrder[] | null) ?? []).filter(
       (o) => !isServiceRequestOrder(o)
     )
 
@@ -196,7 +206,7 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
     for (const order of completed) {
       for (const item of order.items) {
         if (item.cancelled) continue
-        const name = item.menu_item?.name ?? 'Unknown'
+        const name = item.item_name_snapshot || (item.menu_item?.name ?? 'Unknown')
         const itemRevenue = item.quantity * Number(item.price_snapshot ?? 0)
         const existing = itemMap.get(name)
         if (existing) {
@@ -375,6 +385,22 @@ export function DashboardAnalytics({ restaurantId, currency = 'NPR' }: Dashboard
   const periodLabel = getPeriodLabel(period, customRange)
   const totalCatRevenue = categoryData.reduce((s, d) => s + d.revenue, 0)
   const todayInputValue = useMemo(() => toDateInputValue(new Date()), [])
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-8 text-center dark:border-red-900/40 dark:bg-red-950/20">
+        <p className="text-sm font-semibold text-red-600 dark:text-red-400">Failed to load analytics</p>
+        <p className="mt-1 text-xs text-red-500 dark:text-red-500">Check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={fetchAnalytics}
+          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

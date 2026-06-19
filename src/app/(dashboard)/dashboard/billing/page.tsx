@@ -1,8 +1,9 @@
 'use client'
 
 import toast from "react-hot-toast";
-import { MESSAGES } from "@/utils/messages"; 
+import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
+import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -70,7 +71,7 @@ function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
 function getItemsSummary(invoice: Invoice): string {
   const items = invoice.order?.items?.filter(item => !item.cancelled)
   if (!items || items.length === 0) return '—'
-  return items.map(item => `${item.quantity}× ${item.menu_item?.name || 'Item'}`).join(', ')
+  return items.map(item => `${item.quantity}× ${item.item_name_snapshot || item.menu_item?.name || 'Item'}`).join(', ')
 }
 
 function groupInvoicesByTable(invoices: Invoice[]): TableInvoiceGroup[] {
@@ -358,6 +359,13 @@ function BillingContent() {
           body: JSON.stringify({ invoiceId, payment_status: 'paid', payment_method: method }),
         })
       ))
+      invoiceIds.forEach((invoiceId) => {
+        posthog.capture('payment_completed', {
+          restaurant_id: restaurant?.id,
+          invoice_id: invoiceId,
+          payment_method: method,
+        })
+      })
       await fetchData();
       setShowDetail(false);
       setPaymentModalInfo(null);

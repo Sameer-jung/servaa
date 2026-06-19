@@ -5,6 +5,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Servaa - Restaurant Management System',
   description: 'In-restaurant QR ordering and management system for cafes and restaurants',
+  icons: {
+    icon: '/logo/servaa.png',
+  },
 }
 
 export default function RootLayout({
@@ -19,7 +22,7 @@ export default function RootLayout({
         <Toaster 
           position="bottom-center"
           toastOptions={{
-            duration: 3000,
+            duration: 1500,
             style: {
               background: '#1f2937',
               color: '#fff',

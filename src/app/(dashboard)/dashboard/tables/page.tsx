@@ -48,6 +48,7 @@ function TablesContent() {
       .from('tables')
       .select('*')
       .eq('restaurant_id', restaurant.id)
+      .eq('is_active', true)
       .order('table_number')
     setTables(data || [])
     setLoading(false)
@@ -129,7 +130,7 @@ function TablesContent() {
   const handleDeleteTable = async (id: string) => {
     if (!confirm('Delete this table?')) return
     setError('')
-    const { error: tableError } = await supabase.from('tables').delete().eq('id', id)
+    const { error: tableError } = await supabase.from('tables').update({ is_active: false }).eq('id', id)
     if (tableError) {
       console.error('[TablesPage] table delete error:', tableError.message)
       toast.error(MESSAGES.tables.deleteFailed);

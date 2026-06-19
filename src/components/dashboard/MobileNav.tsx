@@ -5,35 +5,46 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/utils/cn'
 import { MobileProfile } from './MobileProfile'
+import { useRestaurant } from '@/hooks/useRestaurant'
+import { useRole } from '@/hooks/useRole'
 import Image from 'next/image'
-
-const navGroups = [
-  {
-    label: "Home",
-    items: [
-      { href: "/dashboard", label: "Overview" },
-      { href: "/dashboard/orders", label: "Orders" },
-      { href: "/dashboard/menu", label: "Menu" },
-      { href: "/dashboard/tables", label: "Tables" },
-    ],
-  },
-  {
-    label: "Restaurant",
-    items: [
-      { href: "/dashboard/billing", label: "Billing" },
-      { href: "/dashboard/settings", label: "Settings" },
-    ],
-  },
-];
-
 
 export function MobileNav() {
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
       Home: true,
+      Operations: true,
       Restaurant: true,
     });
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
+  const { restaurant } = useRestaurant()
+  const { isOwner } = useRole(restaurant?.id)
+
+  const navGroups = [
+    {
+      label: "Home",
+      items: [
+        { href: "/dashboard", label: "Overview" },
+        { href: "/dashboard/orders", label: "Orders" },
+        { href: "/dashboard/menu", label: "Menu" },
+        { href: "/dashboard/tables", label: "Tables" },
+      ],
+    },
+    {
+      label: "Operations",
+      items: [
+        { href: "/dashboard/inventory", label: "Inventory" },
+        ...(isOwner ? [{ href: "/dashboard/expenses", label: "Expenses" }] : []),
+      ],
+    },
+    {
+      label: "Restaurant",
+      items: [
+        { href: "/dashboard/billing", label: "Billing" },
+        { href: "/dashboard/settings", label: "Settings" },
+      ],
+    },
+  ];
 
   return (
     <>

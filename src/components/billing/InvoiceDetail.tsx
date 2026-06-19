@@ -46,7 +46,7 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onMarkPaid, onSendToTa
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-600 dark:text-gray-300">
                     <span className={isCancelled ? 'line-through' : ''}>
-                      {item.quantity}x {item.menu_item?.name || 'Item'}
+                      {item.quantity}x {item.item_name_snapshot || item.menu_item?.name || 'Item'}
                     </span>
                     {isCancelled && (
                       <span className="ml-1.5 text-xs font-semibold text-red-500">(Cancelled)</span>

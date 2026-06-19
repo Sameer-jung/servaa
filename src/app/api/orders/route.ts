@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
+import { getPostHogServerClient } from '@/lib/posthog/server'
 import { createOrder } from '@/lib/orders/createOrder'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
@@ -8,10 +11,12 @@ import { hasRestaurantAccess } from '@/utils/roles'
 import { writeAuditLog } from '@/utils/audit'
 
 export async function POST(request: Request) {
+  let restaurantId: string | undefined
+  let tableId: string | undefined
   try {
     const body = await request.json()
-    const restaurantId = body?.restaurantId
-    const tableId = body?.tableId
+    restaurantId = body?.restaurantId
+    tableId = body?.tableId
     const items = validateOrderItems(body?.items)
     const customerSessionId = readTrimmedString(body?.customerSessionId, 128);
     const clientRequestId = readTrimmedString(body?.clientRequestId, 128)
@@ -51,19 +56,51 @@ export async function POST(request: Request) {
     })
 
     if (result.error) {
+      if (result.status >= 500) {
+        Sentry.captureException(new Error(result.error), {
+          tags: { restaurant_id: restaurantId, table_id: tableId },
+        })
+      }
       return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    const posthogClient = getPostHogServerClient()
+    if (posthogClient) {
+      const orderId = (result.order as { id?: string } | null)?.id
+      posthogClient.capture({
+        distinctId: customerSessionId || tableId,
+        event: 'order_placed',
+        properties: {
+          restaurant_id: restaurantId,
+          table_id: tableId,
+          order_id: orderId,
+          staff_placed: isStaffOrder,
+          source: 'server',
+        },
+        groups: { restaurant: restaurantId },
+      })
+      // flushAt: 1 queues a flush automatically, but in serverless environments
+      // the function can terminate before that in-flight request completes —
+      // await it explicitly so the event is actually delivered.
+      await posthogClient.flush()
     }
 
     return NextResponse.json({ order: result.order })
   } catch (error) {
+    Sentry.captureException(error, { tags: { restaurant_id: restaurantId, table_id: tableId } })
     console.error('[orders.POST] error:', error)
     return NextResponse.json({ error: 'Failed to place order' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let orderItemId: string | undefined
+  let restaurantId: string | undefined
+  let orderId: string | undefined
   try {
-    const { orderItemId, restaurantId } = await request.json()
+    const body = await request.json()
+    orderItemId = body.orderItemId
+    restaurantId = body.restaurantId
 
     if (!isUuid(orderItemId) || !isUuid(restaurantId)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -86,6 +123,8 @@ export async function PATCH(request: Request) {
     if (itemError || !orderItem) {
       return NextResponse.json({ error: 'Order item not found' }, { status: 404 })
     }
+
+    orderId = orderItem.order_id
 
     if (orderItem.cancelled) {
       return NextResponse.json({ error: 'Item already cancelled' }, { status: 400 })
@@ -117,11 +156,12 @@ export async function PATCH(request: Request) {
       .eq('id', orderItemId)
 
     if (cancelError) {
+      Sentry.captureException(cancelError, {
+        tags: { order_id: orderId, restaurant_id: restaurantId },
+      })
       console.error('[orders.PATCH] cancel item error:', cancelError.message)
       return NextResponse.json({ error: 'Failed to cancel item' }, { status: 500 })
     }
-
-    const orderId = orderItem.order_id
 
     // Check if all items are now cancelled → auto-cancel the order
     const { count: activeCount } = await supabaseAdmin
@@ -187,6 +227,9 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true, orderCancelled })
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: { order_item_id: orderItemId, order_id: orderId, restaurant_id: restaurantId },
+    })
     console.error('[orders.PATCH] error:', error)
     return NextResponse.json({ error: 'Failed to cancel item' }, { status: 500 })
   }

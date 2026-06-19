@@ -38,7 +38,7 @@ function getItemSummary(order: OrderWithItems) {
   if (!activeItems.length) return 'No items'
 
   const visibleItems = activeItems.slice(0, 2).map((item) => (
-    `${item.quantity}x ${item.menu_item?.name || 'Unknown Item'}`
+    `${item.quantity}x ${item.item_name_snapshot || item.menu_item?.name || 'Unknown Item'}`
   ))
   const remaining = activeItems.length - visibleItems.length
 
@@ -116,7 +116,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, onCancelI
               <div key={item.id} className={`space-y-0.5 text-sm rounded-lg px-2 py-1.5 transition-colors ${isCancelled ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
                 <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 items-start">
                   <span className={`min-w-0 break-words font-medium ${isCancelled ? 'line-through text-gray-400 dark:text-gray-600' : 'text-gray-600 dark:text-gray-300'}`}>
-                    {item.quantity}x {item.menu_item?.name || 'Unknown Item'}
+                    {item.quantity}x {item.item_name_snapshot || item.menu_item?.name || 'Unknown Item'}
                     {isCancelled && (
                       <span className="ml-1.5 text-xs font-semibold text-red-500 no-underline" style={{ textDecoration: 'none' }}>(Cancelled)</span>
                     )}
@@ -127,7 +127,7 @@ export function OrderCard({ order, onAccept, onReject, onUpdateStatus, onCancelI
                   {isCancellable && onCancelItem && !isCancelled && (
                     <button
                       type="button"
-                      onClick={() => setConfirmState({ type: 'item', itemId: item.id, itemName: item.menu_item?.name || 'this item' })}
+                      onClick={() => setConfirmState({ type: 'item', itemId: item.id, itemName: item.item_name_snapshot || item.menu_item?.name || 'this item' })}
                       disabled={isCancellingThis || isLoading}
                       title="Cancel this item"
                       className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-gray-300 hover:bg-red-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"

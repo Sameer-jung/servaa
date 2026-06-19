@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
+import '@/lib/sentry'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
-import { readTrimmedString } from '@/utils/validation'
+import { isUuid, readTrimmedString } from '@/utils/validation'
 
 type InvoiceOrderRelation = {
   table_id?: string | null
@@ -12,7 +14,7 @@ type InvoiceWithOrderRelation = {
 }
 
 async function validateTableAccess(tableId: string, token: string | null) {
-  if (!token) return true
+  if (!token) return false
 
   const { data: table, error } = await supabaseAdmin
     .from('tables')
@@ -26,12 +28,13 @@ async function validateTableAccess(tableId: string, token: string | null) {
 }
 
 export async function GET(request: Request) {
+  let tableId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
-    const tableId = searchParams.get('tableId')
+    tableId = searchParams.get('tableId')
     const tableToken = readTrimmedString(searchParams.get('tableToken'), 256) || getBearerToken(request)
 
-    if (!tableId) {
+    if (!isUuid(tableId)) {
       return NextResponse.json({ error: 'Missing tableId' }, { status: 400 })
     }
 
@@ -48,6 +51,7 @@ export async function GET(request: Request) {
       .limit(25)
 
     if (ordersError) {
+      Sentry.captureException(ordersError, { tags: { table_id: tableId } })
       return NextResponse.json({ error: ordersError.message }, { status: 500 })
     }
 
@@ -68,19 +72,25 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (invoiceError) {
+      Sentry.captureException(invoiceError, { tags: { table_id: tableId } })
       return NextResponse.json({ error: invoiceError.message }, { status: 500 })
     }
 
     return NextResponse.json({ invoice: invoice || null })
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { table_id: tableId } })
     return NextResponse.json({ error: 'Failed to load invoice' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let invoiceId: string | undefined
+  let tableId: string | undefined
   try {
-    const { invoiceId, tableId, tableToken: rawTableToken } = await request.json()
-    const tableToken = readTrimmedString(rawTableToken, 256) || getBearerToken(request)
+    const body = await request.json()
+    invoiceId = body.invoiceId
+    tableId = body.tableId
+    const tableToken = readTrimmedString(body.tableToken, 256) || getBearerToken(request)
 
     if (!invoiceId || !tableId) {
       return NextResponse.json({ error: 'Missing invoiceId or tableId' }, { status: 400 })
@@ -98,6 +108,7 @@ export async function PATCH(request: Request) {
       .maybeSingle()
 
     if (invoiceError) {
+      Sentry.captureException(invoiceError, { tags: { invoice_id: invoiceId, table_id: tableId } })
       return NextResponse.json({ error: invoiceError.message }, { status: 500 })
     }
 
@@ -119,11 +130,13 @@ export async function PATCH(request: Request) {
       .eq('id', invoiceId)
 
     if (updateError) {
+      Sentry.captureException(updateError, { tags: { invoice_id: invoiceId, table_id: tableId } })
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { invoice_id: invoiceId, table_id: tableId } })
     return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
   }
 }

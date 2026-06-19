@@ -12,11 +12,85 @@ interface MenuItemCardProps {
   currency?: string
   onAdd: () => void
   onRemove: () => void
+  variant?: 'list' | 'grid'
 }
 
-export function MenuItemCard({ item, quantity, currency, onAdd, onRemove }: MenuItemCardProps) {
+export function MenuItemCard({ item, quantity, currency, onAdd, onRemove, variant = 'list' }: MenuItemCardProps) {
   const isAvailable = item.available
   const hasModifiers = Boolean(item.modifier_groups?.length)
+
+  if (variant === 'grid') {
+    return (
+      <div
+        className={
+          isAvailable
+            ? 'flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm'
+            : 'flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-gray-50 opacity-75 shadow-sm'
+        }
+      >
+        <div className="relative h-28 w-full overflow-hidden bg-gray-100 sm:h-32">
+          {item.image_url ? (
+            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-gray-300">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+            </div>
+          )}
+          {!isAvailable && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-700">
+                Out of Stock
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-1 flex-col p-2 sm:p-3">
+          <h3 className="line-clamp-1 text-xs font-semibold text-gray-900 sm:text-sm">{item.name}</h3>
+          {item.description && (
+            <p className="mt-0.5 line-clamp-1 text-[10px] text-gray-500 sm:text-xs">{item.description}</p>
+          )}
+          <div className="mt-1.5 flex items-center justify-between gap-1">
+            <p className="text-xs font-semibold text-gray-900 sm:text-sm">{formatCurrency(item.price, currency)}</p>
+            {!isAvailable ? (
+              <span className="text-[10px] text-gray-400">Unavailable</span>
+            ) : quantity > 0 ? (
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                <button
+                  onClick={onRemove}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-sm text-gray-600 active:bg-gray-200 sm:h-7 sm:w-7"
+                >
+                  −
+                </button>
+                <span className="min-w-[1rem] text-center text-xs font-medium sm:text-sm">{quantity}</span>
+                <button
+                  onClick={onAdd}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-sm text-white active:bg-brand-700 sm:h-7 sm:w-7"
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onAdd}
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white active:bg-brand-700 sm:h-7 sm:w-7"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={isAvailable ? 'flex gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm' : 'flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 opacity-75 shadow-sm'}>

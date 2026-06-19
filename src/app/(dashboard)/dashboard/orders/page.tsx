@@ -1,22 +1,31 @@
 'use client'
 
-import {toast} from "react-hot-toast"
-import {MESSAGES} from "@/utils/messages"
+import { toast } from "react-hot-toast"
+import { MESSAGES } from "@/utils/messages"
 import { useState, useEffect, useCallback, Suspense } from 'react'
-import { ArrowLeft, Minus, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  XCircle,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { useRealtimeOrders } from '@/hooks/useRealtime'
 import { OrderCard } from '@/components/orders/OrderCard'
-import { Tabs } from '@/components/ui/Tabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoading } from '@/components/dashboard/PageLoading'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatTimeAgo } from '@/utils/format'
 import { isServiceRequestOrder } from '@/utils/orders'
+import { cn } from '@/utils/cn'
 import { MenuCategory, MenuItem, Modifier, OrderStatus, OrderWithItems, Restaurant, Table } from '@/types'
-import { writeAuditLog } from '@/utils/audit'
 import { calculateItemTotal } from '@/utils/pricing'
 import {
   getSelectedModifierRecords,
@@ -25,20 +34,24 @@ import {
   type ModifierSelections,
 } from '@/utils/modifiers'
 
-const tabs = [
-  { id: 'active', label: 'Active' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'all', label: 'All' },
-]
-
 const activeStatuses: OrderStatus[] = ['pending', 'accepted', 'preparing', 'ready']
 const completedStatuses: OrderStatus[] = ['completed', 'cancelled']
 const pageSize = 20
 
+const ordersTabDefs = [
+  { id: 'active', label: 'Active', activeClass: 'bg-brand-600 text-white' },
+  { id: 'pending', label: 'Pending', activeClass: 'bg-amber-500 text-white' },
+  { id: 'preparing', label: 'Preparing', activeClass: 'bg-purple-600 text-white' },
+  { id: 'ready', label: 'Ready', activeClass: 'bg-emerald-500 text-white' },
+  { id: 'completed', label: 'Completed', activeClass: 'bg-gray-600 text-white' },
+  { id: 'all', label: 'All', activeClass: 'bg-gray-800 text-white dark:bg-gray-100 dark:text-gray-900' },
+]
+
 function orderMatchesTab(order: OrderWithItems, activeTab: string) {
   if (activeTab === 'active') return activeStatuses.includes(order.status)
   if (activeTab === 'pending') return order.status === 'pending'
+  if (activeTab === 'preparing') return order.status === 'preparing'
+  if (activeTab === 'ready') return order.status === 'ready'
   if (activeTab === 'completed') return completedStatuses.includes(order.status)
   return true
 }
@@ -95,6 +108,10 @@ function groupOrdersByTable(orders: OrderWithItems[]): TableOrderGroup[] {
     (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
   )
 }
+
+// ---------------------------------------------------------------------------
+// Staff POS order entry (unchanged)
+// ---------------------------------------------------------------------------
 
 type PosCartItem = {
   cartItemId: string
@@ -363,7 +380,9 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
               </div>
 
               <div className="relative sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
                 <input
                   type="search"
                   value={searchQuery}
@@ -624,6 +643,19 @@ function StaffPosOrderEntry({ restaurant, onBack, onOrderCreated }: StaffPosOrde
   )
 }
 
+// ---------------------------------------------------------------------------
+// Table order card — new design, full per-order functionality via OrderCard
+// ---------------------------------------------------------------------------
+
+const statusLeftBorder: Record<string, string> = {
+  pending: 'border-l-amber-400',
+  accepted: 'border-l-blue-400',
+  preparing: 'border-l-purple-400',
+  ready: 'border-l-emerald-400',
+  completed: 'border-l-gray-300 dark:border-l-gray-600',
+  cancelled: 'border-l-red-300',
+}
+
 interface TableOrderCardProps {
   group: TableOrderGroup
   expanded: boolean
@@ -632,6 +664,8 @@ interface TableOrderCardProps {
   onReject: (orderId: string) => void
   onUpdateStatus: (orderId: string, status: string) => void
   onCancelItem: (itemId: string, orderId: string) => void
+  onAcceptAll: (group: TableOrderGroup) => Promise<void>
+  onRejectAll: (group: TableOrderGroup) => Promise<void>
   currency?: string
   updatingOrderId?: string | null
   cancellingItemId?: string | null
@@ -645,54 +679,129 @@ function TableOrderCard({
   onReject,
   onUpdateStatus,
   onCancelItem,
+  onAcceptAll,
+  onRejectAll,
   currency,
   updatingOrderId,
   cancellingItemId,
 }: TableOrderCardProps) {
-  const activeCount = group.orders.filter((order) => activeStatuses.includes(order.status)).length
+  const pendingOrders = group.orders.filter((o) => o.status === 'pending')
+  const pendingCount = pendingOrders.length
+  const isUpdating = group.orders.some((o) => o.id === updatingOrderId)
+  const leftBorder = statusLeftBorder[group.status] || 'border-l-gray-300'
+
+  let statusLabel = ''
+  let statusLabelClass = ''
+  if (pendingCount > 0) {
+    statusLabel = `${pendingCount} New ${pendingCount === 1 ? 'Order' : 'Orders'}`
+    statusLabelClass = 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+  } else if (group.status === 'preparing') {
+    const n = group.orders.filter((o) => o.status === 'preparing').length
+    statusLabel = `${n} Preparing`
+    statusLabelClass = 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
+  } else if (group.status === 'ready') {
+    const n = group.orders.filter((o) => o.status === 'ready').length
+    statusLabel = `${n} Ready`
+    statusLabelClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+  } else if (group.status === 'accepted') {
+    const n = group.orders.filter((o) => o.status === 'accepted').length
+    statusLabel = `${n} Accepted`
+    statusLabelClass = 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+  }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <div className={cn(
+      'overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900',
+      'border-l-4',
+      leftBorder
+    )}>
+      {/* Card header — clicking anywhere on the header toggles expansion */}
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start justify-between gap-3 text-left"
+        aria-label={expanded ? 'Collapse orders' : 'Expand orders'}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Table {group.tableNumber}</span>
-            <Badge status={group.status}>{group.status}</Badge>
+            <span className="text-base font-bold text-gray-900 dark:text-gray-100">
+              Table {group.tableNumber}
+            </span>
+            {statusLabel && (
+              <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', statusLabelClass)}>
+                {statusLabel}
+              </span>
+            )}
           </div>
-          <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
-            {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'} - {activeCount} active - {formatTimeAgo(group.latestCreatedAt)}
-          </p>
+          <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-gray-400">
+            <Clock className="h-3 w-3 flex-shrink-0" />
+            <span>{formatTimeAgo(group.latestCreatedAt)}</span>
+          </div>
         </div>
-        <div className="flex-shrink-0 text-right">
-          <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(group.total, currency)}</p>
-          <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{expanded ? 'Hide' : 'View'} orders</p>
+        <div className="flex flex-shrink-0 items-center gap-3">
+          <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+            {formatCurrency(group.total, currency)}
+          </span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400">
+            {expanded
+              ? <ChevronUp className="h-4 w-4" />
+              : <ChevronDown className="h-4 w-4" />
+            }
+          </span>
         </div>
       </button>
 
+      {/* Expanded: per-order cards with full functionality */}
       {expanded && (
-        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4 dark:border-gray-800">
-          {group.orders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onAccept={() => onAccept(order.id)}
-              onReject={() => onReject(order.id)}
-              onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
-              onCancelItem={(itemId) => onCancelItem(itemId, order.id)}
-              currency={currency}
-              isLoading={updatingOrderId === order.id}
-              cancellingItemId={cancellingItemId}
-            />
-          ))}
+        <div className="border-t border-gray-100 dark:border-gray-800">
+          <div className="space-y-3 p-4">
+            {group.orders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                onAccept={() => onAccept(order.id)}
+                onReject={() => onReject(order.id)}
+                onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+                onCancelItem={(itemId) => onCancelItem(itemId, order.id)}
+                currency={currency}
+                isLoading={updatingOrderId === order.id}
+                cancellingItemId={cancellingItemId}
+              />
+            ))}
+          </div>
+
+          {/* Bulk accept/reject only when there are multiple pending orders */}
+          {pendingCount > 1 && (
+            <div className="flex gap-2 border-t border-gray-100 p-4 dark:border-gray-800">
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => onAcceptAll(group)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Accept All Orders
+              </button>
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => onRejectAll(group)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:hover:bg-red-950/30"
+              >
+                <XCircle className="h-4 w-4" />
+                Reject All
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Main orders content
+// ---------------------------------------------------------------------------
 
 function OrdersContent() {
   const [orders, setOrders] = useState<OrderWithItems[]>([])
@@ -704,6 +813,8 @@ function OrdersContent() {
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({})
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
   const [cancellingItemId, setCancellingItemId] = useState<string | null>(null)
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
+
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -728,6 +839,10 @@ function OrdersContent() {
       query = query.in('status', ['pending', 'accepted', 'preparing', 'ready'])
     } else if (activeTab === 'pending') {
       query = query.eq('status', 'pending')
+    } else if (activeTab === 'preparing') {
+      query = query.eq('status', 'preparing')
+    } else if (activeTab === 'ready') {
+      query = query.eq('status', 'ready')
     } else if (activeTab === 'completed') {
       query = query.in('status', ['completed', 'cancelled'])
     }
@@ -752,16 +867,43 @@ function OrdersContent() {
     return (data as OrderWithItems | null) || null
   }, [restaurant, supabase])
 
+  const fetchStatusCounts = useCallback(async () => {
+    if (!restaurant) return
+
+    const [activeRes, pendingRes, preparingRes, readyRes, completedRes] = await Promise.all([
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id).in('status', ['pending', 'accepted', 'preparing', 'ready']),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id).eq('status', 'pending'),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id).eq('status', 'preparing'),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id).eq('status', 'ready'),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id).in('status', ['completed', 'cancelled']),
+    ])
+
+    const activeCount = activeRes.count || 0
+    const completedCount = completedRes.count || 0
+
+    setStatusCounts({
+      active: activeCount,
+      pending: pendingRes.count || 0,
+      preparing: preparingRes.count || 0,
+      ready: readyRes.count || 0,
+      completed: completedCount,
+      all: activeCount + completedCount,
+    })
+  }, [restaurant, supabase])
+
   useEffect(() => {
     fetchOrders()
   }, [fetchOrders])
+
+  useEffect(() => {
+    fetchStatusCounts()
+  }, [fetchStatusCounts])
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId)
     setPage(0)
   }
 
-  // Realtime updates
   useRealtimeOrders(restaurant?.id || '', useCallback((update) => {
     if (update.type === 'DELETE') {
       setOrders((prev) => prev.filter((o) => o.id !== update.orderId))
@@ -794,78 +936,69 @@ function OrdersContent() {
     })
   }
 
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus): Promise<boolean> => {
+    if (!restaurant) return false
+    const response = await fetch('/api/orders/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, restaurantId: restaurant.id, status: newStatus }),
+    })
+    return response.ok
+  }
+
   const handleAccept = async (orderId: string) => {
-    if(updatingOrderId) return
+    if (updatingOrderId) return
     setUpdatingOrderId(orderId)
 
     const order = orders.find(o => o.id === orderId)
-    const isServiceReq = order ? isServiceRequestOrder(order) : false;
+    const isServiceReq = order ? isServiceRequestOrder(order) : false
     const newStatus: OrderStatus = isServiceReq ? 'completed' : 'accepted'
 
     applyOptimisticStatus(orderId, newStatus)
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
-    
+    const ok = await updateOrderStatus(orderId, newStatus)
+
     if (isServiceReq) {
       await supabase.from('service_requests').update({ status: 'completed' }).eq('legacy_order_id', orderId)
     }
 
-    if (error) fetchOrders()
-    if (!error && restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: newStatus },
-      })
-      toast.success(isServiceReq ? 'Request completed' : MESSAGES.staffOrder.accepted);
+    if (!ok) {
+      fetchOrders()
+    } else {
+      toast.success(isServiceReq ? 'Request completed' : MESSAGES.staffOrder.accepted)
+      void fetchStatusCounts()
     }
     setUpdatingOrderId(null)
   }
 
   const handleReject = async (orderId: string) => {
-    if(updatingOrderId) return 
+    if (updatingOrderId) return
     setUpdatingOrderId(orderId)
     applyOptimisticStatus(orderId, 'cancelled')
-    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
-    if (error) fetchOrders()
-    if (!error && restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: 'cancelled' },
-      })
-      toast.success(MESSAGES.staffOrder.rejected);
+    const ok = await updateOrderStatus(orderId, 'cancelled')
+    if (!ok) {
+      fetchOrders()
+    } else {
+      toast.success(MESSAGES.staffOrder.rejected)
+      void fetchStatusCounts()
     }
     setUpdatingOrderId(null)
   }
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
-    if(updatingOrderId) return
+    if (updatingOrderId) return
     setUpdatingOrderId(orderId)
     const nextStatus = status as OrderStatus
     applyOptimisticStatus(orderId, nextStatus)
-    const { error } = await supabase.from('orders').update({ status: nextStatus }).eq('id', orderId)
-    if (error) {
+    const ok = await updateOrderStatus(orderId, nextStatus)
+    if (!ok) {
       fetchOrders()
       setUpdatingOrderId(null)
-      toast.error(MESSAGES.staffOrder.updateFailed);
+      toast.error(MESSAGES.staffOrder.updateFailed)
       return
     }
 
-    if (restaurant) {
-      void writeAuditLog(supabase, {
-        restaurantId: restaurant.id,
-        action: 'order.status_changed',
-        entityType: 'order',
-        entityId: orderId,
-        metadata: { status: nextStatus },
-      })
-      if (nextStatus === 'preparing') toast.success(MESSAGES.staffOrder.preparing)
-      if (nextStatus === 'ready') toast.success(MESSAGES.staffOrder.ready)
-    }
+    if (nextStatus === 'preparing') toast.success(MESSAGES.staffOrder.preparing)
+    if (nextStatus === 'ready') toast.success(MESSAGES.staffOrder.ready)
 
     if (nextStatus === 'completed' && restaurant) {
       const response = await fetch('/api/invoices', {
@@ -877,8 +1010,10 @@ function OrdersContent() {
       if (!response.ok) {
         fetchOrders()
       }
-      if (nextStatus === 'completed') toast.success(MESSAGES.staffOrder.completed)
+      toast.success(MESSAGES.staffOrder.completed)
     }
+
+    void fetchStatusCounts()
     setUpdatingOrderId(null)
   }
 
@@ -899,7 +1034,6 @@ function OrdersContent() {
         return
       }
 
-      // Optimistic update: mark item cancelled, recalc total, auto-cancel order if needed
       setOrders((prev) => prev.map((order) => {
         if (order.id !== orderId) return order
         const updatedItems = order.items.map((item) =>
@@ -908,7 +1042,7 @@ function OrdersContent() {
         const allCancelled = updatedItems.every((item) => item.cancelled)
         const newTotal = updatedItems
           .filter((item) => !item.cancelled)
-          .reduce((sum, item) => sum + item.quantity * item.price_snapshot, 0)
+          .reduce((sum, item) => sum + item.quantity * (item.price_snapshot ?? 0), 0)
         return {
           ...order,
           items: updatedItems,
@@ -922,8 +1056,22 @@ function OrdersContent() {
       } else {
         toast.success('Item cancelled.')
       }
+    } catch {
+      toast.error('Network error — please try again.')
     } finally {
       setCancellingItemId(null)
+    }
+  }
+
+  const handleAcceptAll = async (group: TableOrderGroup) => {
+    for (const order of group.orders.filter((o) => o.status === 'pending')) {
+      await handleAccept(order.id)
+    }
+  }
+
+  const handleRejectAll = async (group: TableOrderGroup) => {
+    for (const order of group.orders.filter((o) => o.status === 'pending')) {
+      await handleReject(order.id)
     }
   }
 
@@ -948,6 +1096,7 @@ function OrdersContent() {
 
   return (
     <div className="space-y-4">
+      {/* Page header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Orders</h1>
@@ -959,50 +1108,95 @@ function OrdersContent() {
         </Button>
       </div>
 
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
+      {/* Tab bar with live count badges */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {ordersTabDefs.map((tab) => {
+          const count = statusCounts[tab.id]
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabChange(tab.id)}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition-all',
+                isActive
+                  ? tab.activeClass
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+              )}
+            >
+              {tab.label}
+              {count !== undefined && (
+                <span className={cn(
+                  'rounded-full px-1.5 py-0.5 text-xs font-bold leading-none',
+                  isActive
+                    ? 'bg-white/25 text-white'
+                    : 'bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-gray-200'
+                )}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
+      {/* Orders grid */}
       {tableGroups.length > 0 ? (
-        <div className="space-y-3">
-          {tableGroups.map((group) => (
-            <TableOrderCard
-              key={group.tableId}
-              group={group}
-              expanded={expandedTables[group.tableId] ?? true}
-              onToggle={() => setExpandedTables((current) => ({
-                ...current,
-                [group.tableId]: !(current[group.tableId] ?? true),
-              }))}
-              onAccept={handleAccept}
-              onReject={handleReject}
-              onUpdateStatus={handleUpdateStatus}
-              onCancelItem={handleCancelItem}
-              currency={restaurant?.currency}
-              updatingOrderId={updatingOrderId}
-              cancellingItemId={cancellingItemId}
-            />
-          ))}
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage((currentPage) => Math.max(0, currentPage - 1))}
-            >
-              Previous
-            </Button>
-            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Page {page + 1}</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!hasNextPage}
-              onClick={() => setPage((currentPage) => currentPage + 1)}
-            >
-              Next
-            </Button>
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {tableGroups.map((group) => (
+              <TableOrderCard
+                key={group.tableId}
+                group={group}
+                expanded={expandedTables[group.tableId] ?? false}
+                onToggle={() => setExpandedTables((current) => ({
+                  ...current,
+                  [group.tableId]: !(current[group.tableId] ?? false),
+                }))}
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onUpdateStatus={handleUpdateStatus}
+                onCancelItem={handleCancelItem}
+                onAcceptAll={handleAcceptAll}
+                onRejectAll={handleRejectAll}
+                currency={restaurant?.currency}
+                updatingOrderId={updatingOrderId}
+                cancellingItemId={cancellingItemId}
+              />
+            ))}
           </div>
-        </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Showing {page * pageSize + 1}–{page * pageSize + tableGroups.length} of{' '}
+              {statusCounts[activeTab] ?? tableGroups.length} orders
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="min-w-[4rem] text-center text-sm font-medium text-gray-700 dark:text-gray-300">
+                Page {page + 1}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasNextPage}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </>
       ) : (
         <EmptyState
           title="No orders"

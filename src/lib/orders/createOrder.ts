@@ -46,6 +46,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     actorUserId = null,
   } = input
 
+  // Staff orders are authenticated separately (actorUserId + RBAC) and never
+  // carry a table token. Customer orders must always present a valid token —
+  // without this check, anyone could place an order under any table's
+  // identity just by changing ?table=<number> in the URL.
+  if (!tableToken && !actorUserId) {
+    return { order: null, error: 'Missing table access token', status: 401 }
+  }
+
   const tableQuery = supabaseAdmin
     .from('tables')
     .select('id, restaurant_id, is_active')
@@ -85,7 +93,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const menuItemIds = Array.from(new Set(items.map((item) => item.menuItemId)))
   const { data: menuItems, error: menuError } = await supabaseAdmin
     .from('menu_items')
-    .select('id, restaurant_id, price, available')
+    .select('id, restaurant_id, price, available, name')
     .eq('restaurant_id', restaurantId)
     .in('id', menuItemIds)
 
@@ -212,6 +220,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return {
       order_id: order.id,
       menu_item_id: item.menuItemId,
+      item_name_snapshot: menuItem?.name || '',
       quantity: item.quantity,
       price_snapshot: itemTotal,
       notes: item.notes,

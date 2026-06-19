@@ -21,6 +21,7 @@ type NotificationOrderItem = {
   quantity: number
   price_snapshot: number
   notes?: string | null
+  item_name_snapshot?: string | null
   modifiers?: Modifier[] | null
   menu_item?: {
     name?: string | null
@@ -150,7 +151,7 @@ export function OrderNotifications() {
                       <div key={item.id} className="space-y-0.5">
                         <div className="grid grid-cols-[auto_1fr_auto] gap-2 text-sm">
                           <span className="font-semibold text-gray-900 dark:text-gray-100">{item.quantity}x</span>
-                          <span className="truncate font-medium text-gray-700 dark:text-gray-300">{item.menu_item?.name || 'Item'}</span>
+                          <span className="truncate font-medium text-gray-700 dark:text-gray-300">{item.item_name_snapshot || item.menu_item?.name || 'Item'}</span>
                           <span className="font-semibold text-gray-900 dark:text-gray-100">
                             {formatCurrency((item.price_snapshot || 0) * item.quantity, restaurant.currency)}
                           </span>
