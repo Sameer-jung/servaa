@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import '@/lib/sentry'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   let restaurantId: string | undefined
@@ -21,6 +22,13 @@ export async function POST(req: NextRequest) {
 
     if (!tableToken) {
       return NextResponse.json({ error: 'Missing table access token' }, { status: 401 })
+    }
+
+    // Throttle per IP+table — a normal customer presses one of these
+    // buttons a handful of times per visit, never in a tight loop.
+    const rateLimitKey = `service-requests:${getClientIp(req)}:${tableId}`
+    if (!checkRateLimit(rateLimitKey, 8, 30_000)) {
+      return NextResponse.json({ error: 'Too many requests, please slow down.' }, { status: 429 })
     }
 
     const { data: table } = await supabaseAdmin

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, unstable_rethrow } from 'next/navigation'
 import { hashTableAccessToken } from '@/utils/tableSession'
+import { getCachedMenu } from '@/lib/menuCache'
 import { MenuClient } from './MenuClient'
 
 interface MenuPageProps {
@@ -72,27 +73,9 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
       table = tableData
     }
 
-    // Get categories and items
-    const [{ data: categories, error: categoriesError }, { data: items, error: itemsError }] = await Promise.all([
-      supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order'),
-      supabase
-        .from('menu_items')
-        .select('*, modifier_groups(*, modifiers(*))')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order'),
-    ])
-
-    if (categoriesError) {
-      console.error('Failed to load menu categories:', categoriesError)
-    }
-
-    if (itemsError) {
-      console.error('Failed to load menu items:', itemsError)
-    }
+    // Get categories and items — cached briefly since this is the highest-traffic
+    // page (every table scan hits it) and menu data rarely changes second-to-second.
+    const { categories, items } = await getCachedMenu(restaurant.id)
 
     return (
       <MenuClient
