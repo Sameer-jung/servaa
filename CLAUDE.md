@@ -75,6 +75,10 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 **Order status transitions**: Staff use `PATCH /api/orders/status` (`{ orderId, restaurantId, status }`). A server-enforced state machine in that route defines valid transitions — never update order status by writing directly to Supabase from client code.
 
+**Order creation is atomic**: `createOrder.ts` calls the `create_order_with_items` Postgres function (`database/006_atomic_order_creation.sql`) via `supabaseAdmin.rpc()` instead of inserting `orders` then `order_items` as two separate calls — both inserts commit or roll back together. Do not revert this to two separate `.insert()` calls with manual cleanup.
+
+**Rate limiting**: `POST /api/orders` (non-staff) and `POST /api/service-requests` are throttled per IP+table via the in-memory fixed-window limiter in `src/lib/rateLimit.ts` (`checkRateLimit`). It's per-instance, not distributed — fine at current scale; swap for Redis/Upstash if traffic grows enough for multi-instance bursts to matter.
+
 **Item-level cancellation**: `order_items` has a `cancelled BOOLEAN NOT NULL DEFAULT false` column. A Postgres trigger (`calculate_order_total`) recalculates `orders.total_amount` automatically on every item update — do not recompute totals manually. If all items in an order are cancelled, the order status is auto-set to `cancelled`. Use `PATCH /api/orders` (`{ orderItemId, restaurantId }`) for staff-initiated item cancellation — this is the only path; do not cancel items by writing directly to Supabase from the client. If an unpaid invoice exists when an item is cancelled, the API recalculates and updates its subtotal/tax/grand_total. The `hasBillableItems` helper in `src/utils/orders.ts` accounts for cancelled items — use it before creating invoices.
 
 **Item name + price snapshots**: `order_items` stores both `price_snapshot` and `item_name_snapshot` at order creation time. This preserves the full line item even if the menu item is later edited or deleted. `menu_item_id` is nullable (`ON DELETE SET NULL`). Display code must prefer `item.item_name_snapshot || item.menu_item?.name` — never rely solely on the joined `menu_item`. Always write `item_name_snapshot` when inserting order items (see `src/lib/orders/createOrder.ts`). Several components define local order item types — add `item_name_snapshot?: string | null` to any new local type.
@@ -114,10 +118,19 @@ Run in order:
 8. `database/fix_duplicate_invoices.sql` (adds the `UNIQUE(order_id)` constraint on `invoices` that the invoices API relies on for idempotency — **not** present in `schema.sql`)
 9. `database/004_inventory_expenses.sql`
 10. `database/005_inventory_categories.sql` (per-restaurant custom inventory categories — adds the `inventory_categories` table + case-insensitive unique index + staff RLS)
+11. `database/006_atomic_order_creation.sql` (adds the `create_order_with_items` function that `src/lib/orders/createOrder.ts` calls via `.rpc()` so the order + order_items inserts commit/rollback together)
 
 **Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
 
 Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`, `service_requests`. (`schema.sql` sets `REPLICA IDENTITY FULL` on these but does not add them to the `supabase_realtime` publication — that is a dashboard/`ALTER PUBLICATION` step.) Do **not** add the inventory/expense tables to the realtime publication — those surfaces refetch on mutation by design.
+
+### Menu caching
+
+`src/lib/menuCache.ts` caches the public menu page's categories/items query (`getCachedMenu`) for 30 seconds, in-memory and per-restaurant — the menu page (`src/app/menu/[restaurantSlug]/page.tsx`) is the highest-traffic route since every table scan hits it. The dashboard menu editor (`src/app/(dashboard)/dashboard/menu/page.tsx`) calls `POST /api/menu/revalidate` (fire-and-forget, via `notifyMenuChanged`) after every category/item/modifier mutation to clear that restaurant's cache entry immediately rather than waiting out the TTL. If you add a new menu mutation path, call `notifyMenuChanged()` after it too.
+
+### Security headers
+
+`next.config.js` sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on all routes via `headers()`. Do not move this logic into `middleware.ts` — middleware short-circuits before `/menu/`, `/api`, and `/` routes, so headers set there would miss the public menu page.
 
 ### Path aliases
 

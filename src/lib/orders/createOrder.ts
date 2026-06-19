@@ -194,31 +194,12 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return total + itemTotal * item.quantity
   }, 0) * 100) / 100
 
-  const { data: order, error: orderError } = await supabaseAdmin
-    .from('orders')
-    .insert({
-      restaurant_id: restaurantId,
-      table_id: tableId,
-      status: 'pending',
-      total_amount: totalAmount,
-      client_request_id: clientRequestId,
-      customer_session_id: customerSessionId || null,
-    })
-    .select()
-    .single()
-
-  if (orderError || !order) {
-    if (orderError) console.error('[createOrder] order insert error:', orderError.message)
-    return { order: null, error: 'Could not place order.', status: 500 }
-  }
-
-  const orderItems = items.map((item) => {
+  const orderItemsPayload = items.map((item) => {
     const menuItem = menuItemsById.get(item.menuItemId)
     const verifiedModifiers = verifiedModifiersByItem.get(item) || []
     const itemTotal = calculateItemTotal(validatePrice(menuItem?.price) || 0, verifiedModifiers)
 
     return {
-      order_id: order.id,
       menu_item_id: item.menuItemId,
       item_name_snapshot: menuItem?.name || '',
       quantity: item.quantity,
@@ -228,14 +209,30 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
   })
 
-  const { data: insertedItems, error: itemsError } = await supabaseAdmin
-    .from('order_items')
-    .insert(orderItems)
-    .select('*, menu_item:menu_items(*)')
+  // Order + items are inserted together inside this function call so they
+  // commit or roll back as one unit — see database/006_atomic_order_creation.sql.
+  const { data: orderId, error: createError } = await supabaseAdmin.rpc('create_order_with_items', {
+    p_restaurant_id: restaurantId,
+    p_table_id: tableId,
+    p_total_amount: totalAmount,
+    p_client_request_id: clientRequestId,
+    p_customer_session_id: customerSessionId || null,
+    p_items: orderItemsPayload,
+  })
 
-  if (itemsError) {
-    console.error('[createOrder] order items insert error:', itemsError.message)
-    await supabaseAdmin.from('orders').delete().eq('id', order.id)
+  if (createError || !orderId) {
+    if (createError) console.error('[createOrder] order creation error:', createError.message)
+    return { order: null, error: 'Could not place order.', status: 500 }
+  }
+
+  const { data: order, error: fetchError } = await supabaseAdmin
+    .from('orders')
+    .select('*, items:order_items(*, menu_item:menu_items(*))')
+    .eq('id', orderId)
+    .single()
+
+  if (fetchError || !order) {
+    console.error('[createOrder] order fetch error:', fetchError?.message)
     return { order: null, error: 'Could not place order.', status: 500 }
   }
 
@@ -247,17 +244,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     entityId: order.id,
     metadata: {
       table_id: tableId,
-      item_count: insertedItems?.length || 0,
+      item_count: order.items?.length || 0,
       total_amount: totalAmount,
     },
   })
 
   return {
-    order: {
-      ...order,
-      total_amount: totalAmount,
-      items: insertedItems || [],
-    },
+    order,
     error: null,
     status: 200,
   }

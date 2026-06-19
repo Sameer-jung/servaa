@@ -107,6 +107,17 @@ function MenuContent() {
     setLoading(false)
   }, [restaurant, supabase])
 
+  // Fire-and-forget: clears the short-lived public menu cache so customer
+  // tables see edits without waiting for it to expire on its own.
+  const notifyMenuChanged = useCallback(() => {
+    if (!restaurant) return
+    fetch('/api/menu/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: restaurant.id }),
+    }).catch(() => {})
+  }, [restaurant])
+
   const openNewItemModal = () => {
     setEditingItem(null)
     setModifierGroups([])
@@ -165,6 +176,7 @@ function MenuContent() {
     }
     setShowCategoryModal(false)
     setEditingCategory(null)
+    notifyMenuChanged()
     fetchData()
   }
 
@@ -178,6 +190,7 @@ function MenuContent() {
       return
     }
     toast.success(MESSAGES.menu.categoryDeleteSuccess);
+    notifyMenuChanged()
     fetchData()
   }
 
@@ -411,6 +424,7 @@ function MenuContent() {
     }
 
     closeItemModal()
+    notifyMenuChanged()
     fetchData()
   }
 
@@ -433,6 +447,7 @@ function MenuContent() {
       })
     }
     toast.success(MESSAGES.menu.itemDeleteSuccess);
+    notifyMenuChanged()
     fetchData()
   }
 
@@ -445,6 +460,7 @@ function MenuContent() {
       return
     }
     toast.success(MESSAGES.menu.availabilityUpdated);
+    notifyMenuChanged()
     fetchData()
   }
 

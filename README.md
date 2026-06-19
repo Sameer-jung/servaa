@@ -58,8 +58,11 @@ For a **fresh** Supabase project, run in this order in the SQL Editor:
 4. `database/001_order_item_cancellation.sql`
 5. `database/002_security_fixes.sql`
 6. `database/003_item_name_snapshot.sql`
+7. `database/004_inventory_expenses.sql`
+8. `database/005_inventory_categories.sql`
+9. `database/006_atomic_order_creation.sql` — adds the `create_order_with_items` function. **Order placement will fail with a 500 until this is applied**, since `src/lib/orders/createOrder.ts` calls it via `.rpc()`.
 
-Then enable **Realtime** on tables: `orders`, `order_items`, `invoices`.
+Then enable **Realtime** on tables: `orders`, `order_items`, `invoices`, `service_requests`.
 
 > `schema.sql` uses plain `CREATE TABLE` — do not rerun it against an existing production database. Numbered migration files use `IF EXISTS` / `IF NOT EXISTS` and are safe to rerun.
 
@@ -100,6 +103,8 @@ For databases that predate the cleanup migrations, apply additive files as neede
 | `/api/invoices/table` | GET/PATCH | Customer invoice delivery and acknowledgement |
 | `/api/qr` | POST | Generate QR code for a table |
 | `/api/auth/callback` | GET | Supabase auth callback |
+| `/api/service-requests` | POST | Customer: request water, waiter, or bill |
+| `/api/menu/revalidate` | POST | Staff/owner: clear the cached public menu for a restaurant |
 
 ---
 
@@ -133,6 +138,20 @@ Cart state lives exclusively in `src/hooks/useCartStore.ts` (Zustand, persisted 
 ### Order Creation
 
 Canonical path: `POST /api/orders` with `client_request_id` for idempotency. The route validates the table, menu items, modifiers, and token before inserting. `StickyCart` has an intentional Supabase direct fallback — do not remove it until the API path is proven reliable in production.
+
+The order + its items are written atomically: `createOrder.ts` calls the `create_order_with_items` Postgres function (`database/006_atomic_order_creation.sql`) via `.rpc()` so both inserts commit or roll back together — there is no manual cleanup path for a partially-created order.
+
+### Rate Limiting
+
+`POST /api/orders` (customer orders) and `POST /api/service-requests` are throttled per IP+table by the in-memory fixed-window limiter in `src/lib/rateLimit.ts`. It's per-instance, not distributed — sufficient at current scale; move to Redis/Upstash if traffic grows enough for multi-instance bursts to matter.
+
+### Security Headers
+
+`next.config.js` sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on every route via `headers()`. This is intentionally in `next.config.js` rather than `middleware.ts`, since middleware short-circuits before `/menu/`, `/api`, and `/` routes.
+
+### Menu Caching
+
+`src/lib/menuCache.ts` caches the public menu page's categories/items query per restaurant for 30 seconds — it's the highest-traffic route since every table scan hits it. The dashboard menu editor calls `POST /api/menu/revalidate` after every save/delete so edits appear immediately instead of waiting out the cache.
 
 ### Order Lifecycle
 
@@ -218,7 +237,16 @@ database/
   001_order_item_cancellation.sql
   002_security_fixes.sql      RLS tightening: customer reads, insert scoping, modifier policies
   003_item_name_snapshot.sql  item_name_snapshot column + FK cascade fix
+  004_inventory_expenses.sql
+  005_inventory_categories.sql
+  006_atomic_order_creation.sql  create_order_with_items RPC for atomic order writes
 ```
+
+---
+
+## CI
+
+`.github/workflows/ci.yml` runs `npm run lint` and `npx tsc --noEmit` on every PR and push to `main`. There is no automated test runner configured.
 
 ---
 

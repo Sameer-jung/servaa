@@ -9,6 +9,7 @@ import { getBearerToken } from '@/utils/tableSession'
 import { isUuid, readTrimmedString, validateOrderItems, validatePrice } from '@/utils/validation'
 import { hasRestaurantAccess } from '@/utils/roles'
 import { writeAuditLog } from '@/utils/audit'
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
 export async function POST(request: Request) {
   let restaurantId: string | undefined
@@ -25,6 +26,16 @@ export async function POST(request: Request) {
 
     if (!isUuid(restaurantId) || !isUuid(tableId) || !items) {
       return NextResponse.json({ error: 'Invalid order payload' }, { status: 400 })
+    }
+
+    // Throttle per IP+table so a script can't hammer order creation; staff
+    // orders are excluded since they're authenticated and rate-limited by
+    // having to be a logged-in human clicking through the dashboard.
+    if (!isStaffOrder) {
+      const rateLimitKey = `orders:${getClientIp(request)}:${tableId}`
+      if (!checkRateLimit(rateLimitKey, 12, 30_000)) {
+        return NextResponse.json({ error: 'Too many requests, please slow down.' }, { status: 429 })
+      }
     }
 
     let actorUserId: string | null = null
