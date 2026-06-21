@@ -48,7 +48,7 @@
         title: "Billing Made Simple",
         description:
         "Handle bill requests, taxes, and payment status from the same restaurant dashboard.",
-        image: "/features/billing.png",
+        image: "/features/Billing.png",
         icon: CreditCard,
         points: [
         "Let customers request bills from their table",
