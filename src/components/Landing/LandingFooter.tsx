@@ -1,4 +1,5 @@
     import Image from "next/image";
+    import Link from "next/link";
     import { Facebook, Instagram, Music2, Twitter } from "lucide-react";
 
     export function LandingFooter() {
@@ -25,7 +26,9 @@
 
             <div className="mt-5 flex flex-wrap gap-3">
             <a
-                href="#"
+                href="https://www.instagram.com/_servaa/"
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label="Instagram"
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-gray-400 transition hover:bg-brand-600 hover:text-white"
             >
@@ -61,20 +64,18 @@
             <div>
             <h3 className="font-semibold">Product</h3>
             <div className="mt-4 space-y-3 text-sm text-gray-400">
-                <p>Features</p>
-                <p>Pricing</p>
-                <p>Free Trial</p>
-                <p>Restaurant Dashboard</p>
+                <a href="#features" className="block transition hover:text-white">Features</a>
+                <a href="#pricing" className="block transition hover:text-white">Pricing</a>
+                <Link href="/register" className="block transition hover:text-white">Free Trial</Link>
+                <Link href="/login" className="block transition hover:text-white">Restaurant Dashboard</Link>
             </div>
             </div>
 
             <div>
             <h3 className="font-semibold">Company</h3>
             <div className="mt-4 space-y-3 text-sm text-gray-400">
-                <p>About Servaa</p>
-                <p>Contact Us</p>
-                <p>Help Center</p>
-                <p>Support</p>
+                <a href="#contact" className="block transition hover:text-white">Contact Us</a>
+                <a href="#contact" className="block transition hover:text-white">Support</a>
             </div>
             </div>
 
@@ -82,10 +83,7 @@
             <h3 className="font-semibold">Contact</h3>
             <div className="mt-4 space-y-3 text-sm text-gray-400">
                 <p>Kathmandu, Nepal</p>
-                <p>+977 9800000000</p>
-                <p>support@servaa.com</p>
-                <p>Privacy Policy</p>
-                <p>Terms and Conditions</p>
+                <a href="mailto:support@servaa.com" className="block transition hover:text-white">support@servaa.com</a>
             </div>
             </div>
         </div>
