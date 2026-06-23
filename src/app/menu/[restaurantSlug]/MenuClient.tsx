@@ -8,7 +8,6 @@ import { MenuItemCard } from '@/components/menu/MenuItemCard'
 import { StickyCart } from '@/components/menu/StickyCart'
 import { CustomerActions } from '@/components/menu/CustomerActions'
 import { OrderTracker } from '@/components/menu/OrderTracker'
-import { TableInvoice } from '@/components/menu/TableInvoice'
 import { ModifierModal } from '@/components/menu/ModifierModal'
 import { OrderSidebar } from '@/components/menu/OrderSidebar'
 import { Restaurant, Table, MenuCategory, MenuItem, Order, Modifier } from '@/types'
@@ -304,11 +303,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               currency={restaurant.currency}
             />
           )}
-          <TableInvoice
-            tableId={table.id}
-            tableToken={tableToken}
-            currency={restaurant.currency}
-          />
         </>
       )}
 

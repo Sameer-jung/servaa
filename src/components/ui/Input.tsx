@@ -7,7 +7,18 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, type = 'text', ...props }, ref) => {
+  ({ className, label, error, type = 'text', onWheel, ...props }, ref) => {
+    // Browsers change a focused <input type="number">'s value on mousewheel
+    // scroll, which is surprising mid-page-scroll and can drift the value
+    // into ugly floats with step="0.01". Blur on wheel so scrolling just
+    // scrolls the page instead.
+    const handleWheel = (event: React.WheelEvent<HTMLInputElement>) => {
+      if (type === 'number') {
+        event.currentTarget.blur()
+      }
+      onWheel?.(event)
+    }
+
     return (
       <div className="w-full">
         {label && (
@@ -18,6 +29,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <input
           type={type}
           ref={ref}
+          onWheel={handleWheel}
           className={cn(
             'w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-base text-gray-900',
             'placeholder:text-gray-400 dark:placeholder:text-gray-500',

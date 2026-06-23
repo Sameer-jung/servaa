@@ -16,6 +16,7 @@ import { formatCurrency, formatDate } from '@/utils/format'
 import { useDebouncedRealtimeRefresh } from '@/hooks/useRealtime'
 import { Invoice, OrderWithItems, Table } from '@/types'
 import { hasBillableItems } from '@/utils/orders'
+import { BillManagerModal } from '@/components/billing/BillManagerModal'
 
 const pageSize = 20
 
@@ -27,14 +28,35 @@ type TableInvoiceGroup = {
   latestCreatedAt: string
 }
 
+// One payment, regardless of whether it came from a legacy single-order
+// invoice or a bill's payments ledger (which is the real source of truth
+// when a bill was settled via Split by Money — an invoice only has one
+// payment_method field and can't represent a split across two methods).
+type PaymentRecord = {
+  id: string
+  createdAt: string
+  amount: number
+  method: string
+  tableNumber: string
+  itemsSummary: string
+}
+
+type BillPaymentRow = {
+  id: string
+  amount: number
+  method: string
+  created_at: string
+  table_number: string | null
+}
+
 type DayGroup = {
   label: string
   dateKey: string
-  invoices: Invoice[]
+  records: PaymentRecord[]
   subtotal: number
 }
 
-function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
+function groupPaymentRecordsByDay(records: PaymentRecord[]): DayGroup[] {
   const now = new Date()
   const todayKey = now.toDateString()
   const yesterday = new Date(now)
@@ -43,8 +65,8 @@ function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
 
   const map = new Map<string, DayGroup>()
 
-  for (const invoice of invoices) {
-    const date = new Date(invoice.created_at)
+  for (const record of records) {
+    const date = new Date(record.createdAt)
     const key = date.toDateString()
     let label: string
     if (key === todayKey) {
@@ -56,15 +78,15 @@ function groupInvoicesByDay(invoices: Invoice[]): DayGroup[] {
     }
     const existing = map.get(key)
     if (existing) {
-      existing.invoices.push(invoice)
-      existing.subtotal += Number(invoice.grand_total || 0)
+      existing.records.push(record)
+      existing.subtotal += Number(record.amount || 0)
     } else {
-      map.set(key, { label, dateKey: key, invoices: [invoice], subtotal: Number(invoice.grand_total || 0) })
+      map.set(key, { label, dateKey: key, records: [record], subtotal: Number(record.amount || 0) })
     }
   }
 
   return Array.from(map.values()).sort(
-    (a, b) => new Date(b.invoices[0].created_at).getTime() - new Date(a.invoices[0].created_at).getTime()
+    (a, b) => new Date(b.records[0].createdAt).getTime() - new Date(a.records[0].createdAt).getTime()
   )
 }
 
@@ -72,6 +94,28 @@ function getItemsSummary(invoice: Invoice): string {
   const items = invoice.order?.items?.filter(item => !item.cancelled)
   if (!items || items.length === 0) return '—'
   return items.map(item => `${item.quantity}× ${item.item_name_snapshot || item.menu_item?.name || 'Item'}`).join(', ')
+}
+
+function invoiceToPaymentRecord(invoice: Invoice): PaymentRecord {
+  return {
+    id: invoice.id,
+    createdAt: invoice.created_at,
+    amount: Number(invoice.grand_total || 0),
+    method: invoice.payment_method || '',
+    tableNumber: invoice.order?.table?.table_number || '—',
+    itemsSummary: getItemsSummary(invoice),
+  }
+}
+
+function billPaymentToRecord(payment: BillPaymentRow): PaymentRecord {
+  return {
+    id: payment.id,
+    createdAt: payment.created_at,
+    amount: Number(payment.amount || 0),
+    method: payment.method,
+    tableNumber: payment.table_number || '—',
+    itemsSummary: 'Combined bill payment',
+  }
 }
 
 function groupInvoicesByTable(invoices: Invoice[]): TableInvoiceGroup[] {
@@ -109,13 +153,11 @@ interface BillingTableGroupProps {
   onView: (invoice: Invoice) => void;
   onMarkPaid?: (invoiceId: string) => void;
   onMarkAllPaid?: (invoiceIds: string[]) => void;
-  onSendToTable: (invoiceId: string) => void;
   currency?: string;
-  isSending?: (invoiceId: string) => boolean;
   isMarkingPaid?: (invoiceId: string) => boolean;
 }
 
-function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToTable, currency, isSending, isMarkingPaid }: BillingTableGroupProps) {
+function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, currency, isMarkingPaid }: BillingTableGroupProps) {
   const isUnpaid = group.invoices.some(i => i.payment_status === 'unpaid');
   const unpaidInvoiceIds = group.invoices.filter(i => i.payment_status === 'unpaid').map(i => i.id);
 
@@ -152,7 +194,8 @@ function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToT
                     {invoice.payment_method ? ` (${invoice.payment_method})` : ''}
                   </Badge>
                 </div>
-                <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{formatDate(invoice.created_at)}</p>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 truncate">{getItemsSummary(invoice)}</p>
+                <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">{formatDate(invoice.created_at)}</p>
               </div>
               <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
                 {formatCurrency(invoice.grand_total, currency)}
@@ -163,11 +206,8 @@ function BillingTableGroup({ group, onView, onMarkPaid, onMarkAllPaid, onSendToT
               <Button size="sm" variant="outline" className="flex-1" onClick={() => onView(invoice)}>
                 View
               </Button>
-              <Button size="sm" variant="outline" className="flex-1" isLoading={Boolean(isSending?.(invoice.id))} disabled={Boolean(isMarkingPaid?.(invoice.id))} onClick={() => onSendToTable(invoice.id)}>
-                Send to Table
-              </Button>
               {invoice.payment_status === 'unpaid' && onMarkPaid && (
-                <Button size="sm" className="flex-1" isLoading={Boolean(isMarkingPaid?.(invoice.id))} disabled={Boolean(isSending?.(invoice.id))} onClick={() => onMarkPaid(invoice.id)}>
+                <Button size="sm" className="flex-1" isLoading={Boolean(isMarkingPaid?.(invoice.id))} onClick={() => onMarkPaid(invoice.id)}>
                   Mark Paid
                 </Button>
               )}
@@ -248,6 +288,7 @@ function BillingContent() {
   const [activeOrders, setActiveOrders] = useState<OrderWithItems[]>([])
   const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([])
   const [paidInvoices, setPaidInvoices] = useState<Invoice[]>([])
+  const [billPayments, setBillPayments] = useState<BillPaymentRow[]>([])
   const [unpaidPage] = useState(0)
   const [paidPage, setPaidPage] = useState(0)
   const [hasNextPaidPage, setHasNextPaidPage] = useState(false)
@@ -255,11 +296,11 @@ function BillingContent() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [message, setMessage] = useState('')
-  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [markingPaidInvoiceId, setMarkingPaidInvoiceId] = useState<string | null>(null)
   const [paymentModalInfo, setPaymentModalInfo] = useState<{ invoiceIds: string[] } | null>(null)
-  
+
   const [selectedTableGroupId, setSelectedTableGroupId] = useState<string | null>(null)
+  const [billManagerTableId, setBillManagerTableId] = useState<string | null>(null)
 
   const realtimeHealthyRef = useRef(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
@@ -276,21 +317,24 @@ function BillingContent() {
     }
 
     setLoading(true)
-    const [unpaidResponse, paidResponse, tablesResult, ordersResult] = await Promise.all([
+    const [unpaidResponse, paidResponse, billPaymentsResponse, tablesResult, ordersResult] = await Promise.all([
       fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=unpaid&page=${unpaidPage}&pageSize=${pageSize}`),
       fetch(`/api/invoices?restaurantId=${encodeURIComponent(restaurant.id)}&paymentStatus=paid&page=${paidPage}&pageSize=${pageSize}`),
+      fetch(`/api/billing/payments?restaurantId=${encodeURIComponent(restaurant.id)}`),
       supabase.from('tables').select('*').eq('restaurant_id', restaurant.id).order('table_number'),
       supabase.from('orders').select('*, items:order_items(*)').eq('restaurant_id', restaurant.id).in('status', ['pending', 'accepted', 'preparing', 'ready'])
     ])
 
     const unpaidResult = await unpaidResponse.json().catch(() => null)
     const paidResult = await paidResponse.json().catch(() => null)
+    const billPaymentsResult = await billPaymentsResponse.json().catch(() => null)
 
     if (!unpaidResponse.ok || !paidResponse.ok) {
       setMessage(unpaidResult?.error || paidResult?.error || 'Failed to load invoices')
       toast.error(MESSAGES.billing.loadFailed)
       setUnpaidInvoices([])
       setPaidInvoices([])
+      setBillPayments([])
       setTables([])
       setActiveOrders([])
       setLoading(false)
@@ -302,9 +346,10 @@ function BillingContent() {
 
     setUnpaidInvoices(nextUnpaidInvoices)
     setPaidInvoices(nextPaidInvoices)
+    setBillPayments(billPaymentsResponse.ok ? (billPaymentsResult?.payments as BillPaymentRow[] | undefined) || [] : [])
     setTables(tablesResult.data || [])
     setActiveOrders((ordersResult.data as OrderWithItems[]) || [])
-    
+
     setHasNextPaidPage(nextPaidInvoices.length === pageSize)
     setLoading(false)
   }, [paidPage, restaurant, unpaidPage, supabase])
@@ -372,32 +417,6 @@ function BillingContent() {
       toast.success(MESSAGES.billing.markPaidSuccess);
     } finally {
       setMarkingPaidInvoiceId(null);
-    }
-  }
-
-  const handleSendToTable = async (invoiceId: string) => {
-    if (sendingInvoiceId || markingPaidInvoiceId) return;
-    setMessage('')
-    setSendingInvoiceId(invoiceId)
-
-    try {
-      const response = await fetch("/api/invoices/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId }),
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        setMessage(result?.error || "Failed to send invoice");
-        toast.error(MESSAGES.billing.sendFailed);
-        return;
-      }
-      setMessage("Invoice sent to table");
-      toast.success(MESSAGES.billing.invoiceSentToTable);
-      await fetchData();
-    } finally {
-      setSendingInvoiceId(null);
     }
   }
 
@@ -554,9 +573,7 @@ function BillingContent() {
                     setSelectedInvoice(invoice);
                     setShowDetail(true);
                   }}
-                  onSendToTable={handleSendToTable}
                   currency={restaurant?.currency}
-                  isSending={(invoiceId) => sendingInvoiceId === invoiceId}
                   isMarkingPaid={(invoiceId) =>
                     markingPaidInvoiceId === invoiceId
                   }
@@ -611,8 +628,16 @@ function BillingContent() {
           </div>
 
           {(() => {
-            const filtered = paidInvoices.filter(inv => inv.payment_method === paymentSubTab)
-            const dayGroups = groupInvoicesByDay(filtered)
+            // Merge legacy per-order invoice payments with bill payments (the
+            // real source of truth when a bill was settled via Split by
+            // Money — invoices synced from a paid bill carry the 'Bill'
+            // sentinel method and are excluded here so they don't get
+            // misattributed to either tab).
+            const records = [
+              ...paidInvoices.filter((inv) => inv.payment_method === paymentSubTab).map(invoiceToPaymentRecord),
+              ...billPayments.filter((p) => p.method === paymentSubTab).map(billPaymentToRecord),
+            ]
+            const dayGroups = groupPaymentRecordsByDay(records)
 
             if (dayGroups.length === 0) {
               return (
@@ -632,12 +657,12 @@ function BillingContent() {
                     </h3>
                     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-800 dark:bg-gray-900">
                       <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                        {group.invoices.map(invoice => (
-                          <div key={invoice.id} className="flex items-start gap-3 p-4">
+                        {group.records.map(record => (
+                          <div key={record.id} className="flex items-start gap-3 p-4">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                  Table {invoice.order?.table?.table_number || '—'}
+                                  Table {record.tableNumber}
                                 </span>
                                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                                   paymentSubTab === 'Online'
@@ -648,21 +673,21 @@ function BillingContent() {
                                 </span>
                               </div>
                               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">
-                                {getItemsSummary(invoice)}
+                                {record.itemsSummary}
                               </p>
                               <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                                {formatDate(invoice.created_at)}
+                                {formatDate(record.createdAt)}
                               </p>
                             </div>
                             <p className="flex-shrink-0 text-sm font-bold text-gray-900 dark:text-gray-100">
-                              {formatCurrency(invoice.grand_total, restaurant?.currency)}
+                              {formatCurrency(record.amount, restaurant?.currency)}
                             </p>
                           </div>
                         ))}
                       </div>
                       <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          {group.invoices.length} {group.invoices.length === 1 ? 'payment' : 'payments'}
+                          {group.records.length} {group.records.length === 1 ? 'payment' : 'payments'}
                         </span>
                         <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
                           {formatCurrency(group.subtotal, restaurant?.currency)}
@@ -681,32 +706,66 @@ function BillingContent() {
         {(() => {
           if (!selectedTableGroupId) return null
           const group = unpaidInvoiceGroups.find(g => g.tableId === selectedTableGroupId)
-          if (!group) {
-             return (
-               <div className="py-6 text-center">
-                 <p className="text-gray-500 dark:text-gray-400">This table has active orders being prepared, but no invoices have been generated yet.</p>
-               </div>
-             )
-          }
+          const shouldSuggestCombine = Boolean(group && group.invoices.length >= 3)
+          const hasUnacceptedOrder = activeOrders.some(
+            (order) => order.table_id === selectedTableGroupId && order.status === 'pending' && hasBillableItems(order)
+          )
           return (
-            <BillingTableGroup
-              group={group}
-              onView={(invoice) => {
-                setSelectedInvoice(invoice);
-                setShowDetail(true);
-              }}
-              onMarkPaid={(invoiceId) => setPaymentModalInfo({ invoiceIds: [invoiceId] })}
-              onMarkAllPaid={(invoiceIds) => setPaymentModalInfo({ invoiceIds })}
-              onSendToTable={handleSendToTable}
-              currency={restaurant?.currency}
-              isSending={(invoiceId) => sendingInvoiceId === invoiceId}
-              isMarkingPaid={(invoiceId) =>
-                markingPaidInvoiceId === invoiceId || markingPaidInvoiceId === 'multiple'
-              }
-            />
+            <div className="space-y-4">
+              {hasUnacceptedOrder && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+                  This table has an ongoing order that hasn&apos;t been accepted yet — billing may be incomplete until the kitchen accepts it.
+                </div>
+              )}
+              {shouldSuggestCombine && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  This table has {group!.invoices.length} separate invoices piling up — combine them into one bill below for one clean view instead of handling each one individually.
+                </div>
+              )}
+              <Button
+                variant={shouldSuggestCombine ? 'primary' : 'outline'}
+                className="w-full"
+                onClick={() => {
+                  setBillManagerTableId(selectedTableGroupId)
+                  setSelectedTableGroupId(null)
+                }}
+              >
+                Combine Orders & Split Bill
+              </Button>
+              {!group && (
+                <div className="py-6 text-center">
+                  <p className="text-gray-500 dark:text-gray-400">This table has active orders being prepared, but no invoices have been generated yet.</p>
+                </div>
+              )}
+              {group && (
+                <BillingTableGroup
+                  group={group}
+                  onView={(invoice) => {
+                    setSelectedInvoice(invoice);
+                    setShowDetail(true);
+                  }}
+                  onMarkPaid={(invoiceId) => setPaymentModalInfo({ invoiceIds: [invoiceId] })}
+                  onMarkAllPaid={(invoiceIds) => setPaymentModalInfo({ invoiceIds })}
+                  currency={restaurant?.currency}
+                  isMarkingPaid={(invoiceId) =>
+                    markingPaidInvoiceId === invoiceId || markingPaidInvoiceId === 'multiple'
+                  }
+                />
+              )}
+            </div>
           )
         })()}
       </Modal>
+
+      {restaurant && billManagerTableId && (
+        <BillManagerModal
+          isOpen={Boolean(billManagerTableId)}
+          onClose={() => setBillManagerTableId(null)}
+          restaurant={restaurant}
+          tableId={billManagerTableId}
+          tableNumber={uniqueTables.find((t) => t.id === billManagerTableId)?.table_number || ''}
+        />
+      )}
 
       <InvoiceDetail
         invoice={selectedInvoice}
@@ -717,14 +776,8 @@ function BillingContent() {
             ? () => setPaymentModalInfo({ invoiceIds: [selectedInvoice.id] })
             : undefined
         }
-        onSendToTable={
-          selectedInvoice
-            ? () => handleSendToTable(selectedInvoice.id)
-            : undefined
-        }
         currency={restaurant?.currency}
-        sendingInvoiceId={sendingInvoiceId}
-        markingPaidInvoiceId={markingPaidInvoiceId} 
+        markingPaidInvoiceId={markingPaidInvoiceId}
       />
 
       <Modal isOpen={Boolean(paymentModalInfo)} onClose={() => setPaymentModalInfo(null)} title="Select Payment Method">

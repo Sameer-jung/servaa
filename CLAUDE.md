@@ -34,8 +34,8 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 | `/api/orders/session` | Customer: fetch full order session (GET) |
 | `/api/qr` | Generate table QR code (POST) |
 | `/api/invoices` | Invoice CRUD (GET/POST/PATCH) |
-| `/api/invoices/send` | Push invoice to customer table (POST) |
-| `/api/invoices/table` | Customer invoice delivery and acknowledgement (GET/PATCH) |
+| `/api/billing/bills` | Staff: combine orders into a bill, add orders, read, delete (GET/POST/PATCH/DELETE) |
+| `/api/billing/payments` | Staff: record/list bill payments (GET/POST) |
 | `/api/inventory` | Staff: inventory item CRUD (GET/POST/PATCH) |
 | `/api/inventory/movements` | Staff: stock movement ledger (GET/POST) |
 | `/api/expenses` | Owner-only: expense CRUD (GET/POST/PATCH/DELETE) |
@@ -46,7 +46,7 @@ Servaa is a multi-tenant SaaS restaurant QR ordering platform built with **Next.
 
 - **Cart state**: lives exclusively in `src/hooks/useCartStore.ts` (Zustand, persisted to `localStorage` under key `qr-order-cart`, scoped to `restaurantId` + `tableId`). Do not create another cart store.
 - **Order creation**: canonical path is `POST /api/orders` with `client_request_id` for idempotency. `StickyCart` has an intentional Supabase direct fallback for compatibility — do not remove it.
-- **Realtime + polling**: dashboard uses Supabase Realtime subscriptions (`src/hooks/useRealtime.ts`) for `orders`, `order_items`, and `invoices`. Customer invoice delivery uses 5-second polling. Both mechanisms are intentional — do not remove polling just because realtime exists.
+- **Realtime + polling**: dashboard uses Supabase Realtime subscriptions (`src/hooks/useRealtime.ts`) for `orders`, `order_items`, and `invoices`. Both mechanisms are intentional — do not remove polling just because realtime exists. (The old "send invoice to table" push + 5-second customer poll/ack flow — `/api/invoices/send`, `/api/invoices/table`, `TableInvoice.tsx` — was removed: its only UI trigger, the dashboard's "Send to Table" button, was removed first, leaving it permanently unreachable.)
 - **Audit logging**: `src/utils/audit.ts` writes non-blocking fire-and-forget to the `audit_logs` table. Must never be made synchronous or await-blocking.
 
 ### Multi-tenancy and RBAC
@@ -89,6 +89,21 @@ Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_da
 
 `src/components/dashboard/DashboardAnalytics.tsx` renders revenue, order counts, top-5 items, and a category revenue donut. It filters service-request orders and cancelled items from all metrics. Integrated into `DashboardOverview` behind an Orders / Analytics tab toggle. The revenue card uses `orders.total_amount` (DB-maintained); the donut/top-items derive revenue from `price_snapshot × quantity` on items — keep these in sync when changing how order totals are calculated.
 
+### Bill combining & split-by-money payments
+
+Staff-only billing layer (`/dashboard/billing` → "Combine Orders & Split Bill" per table) added in `007_billing_splits_payments.sql`, simplified in `008_remove_bill_split_concept.sql`, with an optional tab name added in `009_bill_customer_name.sql`. It sits **above** `orders`/`invoices` without touching either.
+
+- **Tables**: `bills` (the unit staff create — combines one or more orders on a table), `bill_orders` (join table, `UNIQUE(order_id)` so an order can only belong to one bill), `payments` (append-only ledger of amount + method). There is no per-person split entity — 007's `bill_splits`/`bill_split_parts`/`bill_split_items` (equal/by-item splitting into named people) were dropped in 008 per product decision; a bill is paid by recording one or more `payments` rows directly against it.
+- **Eligibility**: only `completed` orders with billable items can be combined into a bill — matches the existing invoice-auto-creation semantics so a bill's constituent orders never change total mid-kitchen-flow. The "Completed Orders to Combine" list (`BillManagerModal`) also excludes orders that already have a `paid` invoice — otherwise every historical completed order for a table (settled via the old per-order invoice flow, possibly before this feature existed) would show up forever.
+- **Bill total is never cached.** It's computed live (both in the `calculate_bill_total` SQL function and `loadBillDetail`/`computeBillTotals` in `src/lib/billing/`) as `SUM(orders.total_amount) × (1 + restaurant.tax_rate/100)` — tax-inclusive, mirroring `invoices.grand_total`. This is so a later item cancellation on a combined order is reflected immediately without this layer overriding the orders trigger.
+- **`bills.status`** (`open`/`paid`) is trigger-maintained off the `payments` ledger (`update_bill_status`), the same pattern as `orders.total_amount`/`update_order_total` — never set it from app code.
+- **Split by Money**: the dashboard UI (`SplitByMoneyForm` in `BillManagerModal.tsx`) lets staff settle a bill across two methods in one action — e.g. part Cash, part QR/Online — by entering both amounts and submitting once. This fires two sequential `POST /api/billing/payments` calls (one per non-zero amount); there's no dedicated "split" endpoint, it's just the existing payments API called twice.
+- **Payments** always target the whole bill. Amount is validated against the live remaining owed (rounding-tolerant) via `/api/billing/payments`.
+- **RBAC**: combining orders and recording payments are staff-level (matches the existing invoice `payment_status` PATCH gate). Deleting a `bill` or a `payment` row is owner-only (rare-correction gating, same pattern as `stock_movements_delete_owner`). A `paid` bill cannot be deleted at all (API-enforced, button hidden in the UI) — its orders' invoices were already synced to `paid` when it settled (see `syncInvoicesForPaidBill` in `/api/billing/payments`), and deleting the bill would wipe that payment ledger while leaving those invoices permanently stuck `paid` with nothing backing it.
+- **Receipts**: `src/lib/billing/receipt.ts` (`buildReceiptData`) builds printer-format-agnostic structured data for a bill (all combined orders' items + the full payment ledger). Two renderers consume it: `receiptHtml.ts` (`printReceiptInBrowser` — browser print dialog, ships now) and `receiptEscPos.ts` (`buildEscPosReceipt` — real ESC/POS byte encoding, but **no transport/bridge connection yet**; wiring it to a LAN/USB thermal printer is an explicitly deferred phase 2).
+- These tables stay **out of the realtime publication** (same as inventory/expenses) — the billing UI refetches on mutation.
+- **`bills.customer_name`** (`009_bill_customer_name.sql`) is a purely descriptive, optional text field staff can set on an open bill — e.g. "John", "Room 4" — so an unpaid tab is identifiable when the customer comes back to settle it later. Editable from `BillDetailView` via `PATCH /api/billing/bills` (`{ billId, restaurantId, customerName }`); cleared by saving an empty string. No behavior keys off it. The "Open Bills" list in `BillManagerModal` only shows `status === 'open'` bills — settled bills drop off the list once paid.
+
 ### Inventory & expenses (Operations module)
 
 Manual stock tracking and expense logging, added in `004_inventory_expenses.sql`. Lives under the dashboard "Operations" nav group (`/dashboard/inventory`, `/dashboard/expenses`).
@@ -119,6 +134,9 @@ Run in order:
 9. `database/004_inventory_expenses.sql`
 10. `database/005_inventory_categories.sql` (per-restaurant custom inventory categories — adds the `inventory_categories` table + case-insensitive unique index + staff RLS)
 11. `database/006_atomic_order_creation.sql` (adds the `create_order_with_items` function that `src/lib/orders/createOrder.ts` calls via `.rpc()` so the order + order_items inserts commit/rollback together)
+12. `database/007_billing_splits_payments.sql` (adds `bills`, `bill_orders`, `bill_splits`, `bill_split_parts`, `bill_split_items`, `payments` — staff-side bill combining/splitting/partial payments, layered above `orders`/`invoices`)
+13. `database/008_remove_bill_split_concept.sql` (drops `bill_splits`/`bill_split_parts`/`bill_split_items` and `payments.bill_split_part_id` — per-person bill splitting was replaced by split-by-money payments; run after 007 for both fresh and existing installs)
+14. `database/009_bill_customer_name.sql` (adds nullable `bills.customer_name` — lets staff label an open bill with who it's owed by)
 
 **Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
 

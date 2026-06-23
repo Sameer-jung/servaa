@@ -155,9 +155,6 @@ export interface Invoice {
   payment_status: PaymentStatus
   payment_method?: string
   notes?: string
-  sent_to_table_at?: string
-  acknowledged_by_table_at?: string
-  table_session_token_hash?: string
   created_at: string
   paid_at?: string
   order?: Order
@@ -175,6 +172,41 @@ export interface ServiceRequest {
   created_at: string
   updated_at: string
   table?: Table
+}
+
+// ============================================
+// BILLING: BILLS, PAYMENTS
+// ============================================
+export type BillStatus = 'open' | 'paid'
+
+export interface Bill {
+  id: string
+  restaurant_id: string
+  table_id: string
+  status: BillStatus
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+  paid_at?: string | null
+  customer_name?: string | null
+  table?: Table
+  orders?: OrderWithItems[]
+  payments?: Payment[]
+  subtotal?: number
+  tax_amount?: number
+  total?: number
+  paid?: number
+  owed?: number
+}
+
+export interface Payment {
+  id: string
+  bill_id: string
+  restaurant_id: string
+  amount: number
+  method: string
+  recorded_by?: string | null
+  created_at: string
 }
 
 // ============================================
