@@ -1,6 +1,7 @@
     import Image from "next/image";
     import {
     BadgeCheck,
+    Boxes,
     CreditCard,
     LayoutDashboard,
     ListChecks,
@@ -18,6 +19,7 @@
         "Track pending, preparing, ready, and completed orders",
         "Reduce confusion between kitchen and service staff",
         "Keep every table order visible in one dashboard",
+        "Let customers call a waiter or request water with one tap",
         ],
     },
     {
@@ -54,6 +56,19 @@
         "Let customers request bills from their table",
         "Calculate taxes clearly for each order",
         "Track paid and unpaid bills easily",
+        ],
+    },
+    {
+        title: "Inventory & Expense Tracking",
+        description:
+        "Keep stock levels accurate and track restaurant expenses without leaving your dashboard.",
+        image: "/features/Dashboard.png",
+        icon: Boxes,
+        points: [
+        "Log stock purchases, usage, and wastage with a simple ledger",
+        "Get low-stock alerts before items run out",
+        "Track expenses and see revenue minus costs at a glance",
+        "Export sales and expense reports as PDF",
         ],
     },
     ];

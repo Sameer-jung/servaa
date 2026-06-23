@@ -4,7 +4,8 @@ import { LoginForm } from '@/components/auth/LoginForm'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
-  title: 'Sign In - QR Order',
+  title: 'Sign In',
+  description: 'Sign in to your Servaa restaurant management dashboard.',
 }
 
 export default async function LoginPage() {
@@ -19,7 +20,7 @@ export default async function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-brand-600">QR Order</h1>
+          <h1 className="text-2xl font-bold text-brand-600">Servaa</h1>
           <p className="mt-1 text-sm text-gray-500">Restaurant Management System</p>
         </div>
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">

@@ -8,6 +8,7 @@ import { FeaturesSection } from "@/components/Landing/FeaturesSection";
 import { WhyChooseUsSection } from "@/components/Landing/WhyChooseUsSection";
 import { BusinessTypesSection } from "@/components/Landing/BusinessTypesSection";
 import { PricingSection } from "@/components/Landing/PricingSection";
+import { FAQSection } from "@/components/Landing/FAQSection";
 import { ContactSection } from "@/components/Landing/ContactSection";
 import { LandingFooter } from "@/components/Landing/LandingFooter";
 
@@ -47,6 +48,7 @@ export default function HomePage() {
       <WhyChooseUsSection />
       <BusinessTypesSection />
       <PricingSection onChoosePlan={goToRegister} />
+      <FAQSection />
       <ContactSection />
       <LandingFooter />
     </div>

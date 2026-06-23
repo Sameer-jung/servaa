@@ -55,9 +55,9 @@
             </h2>
 
             <p className="mt-5 text-gray-300">
-                Servaa is not just a QR menu. It connects customer ordering, staff
-                workflow, table sessions, and billing into one smooth restaurant
-                system.
+                Servaa is not just a QR menu. It is a complete restaurant management
+                system that connects customer ordering, staff workflow, table
+                sessions, billing, and inventory into one smooth operation.
             </p>
             </div>
 
@@ -84,11 +84,12 @@
             })}
             </div>
 
-            <div className="mt-10 grid gap-4 rounded-3xl border border-white/10 bg-white/[0.04] p-6 sm:grid-cols-3">
+            <div className="mt-10 grid gap-4 rounded-3xl border border-white/10 bg-white/[0.04] p-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
                 ["Less waiting", "Customers order when they are ready."],
                 ["Less confusion", "Staff sees table and order details clearly."],
                 ["More control", "Owners manage menu, tables, and billing easily."],
+                ["No lost orders", "Reliable, even during rush hour."],
             ].map(([title, description]) => (
                 <div key={title} className="flex gap-3">
                 <BadgeCheck className="mt-1 h-5 w-5 shrink-0 text-brand-300" />

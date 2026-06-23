@@ -4,7 +4,8 @@ import { RegisterForm } from '@/components/auth/RegisterForm'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
-  title: 'Create Account - QR Order',
+  title: 'Start Free Trial',
+  description: 'Create your free Servaa account and set up QR ordering, table management, and billing for your restaurant in minutes.',
 }
 
 export default async function RegisterPage() {
@@ -19,7 +20,7 @@ export default async function RegisterPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-brand-600">QR Order</h1>
+          <h1 className="text-2xl font-bold text-brand-600">Servaa</h1>
           <p className="mt-1 text-sm text-gray-500">Get started with your restaurant</p>
         </div>
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">

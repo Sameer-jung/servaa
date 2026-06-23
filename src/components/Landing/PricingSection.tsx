@@ -34,6 +34,7 @@
         "Unlimited menu updates",
         "Order status management",
         "Billing management",
+        "Service requests (waiter, water, bill)",
         "Basic analytics",
         ],
     },
@@ -47,6 +48,7 @@
         buttonVariant: "primary" as const,
         features: [
         "Everything in Standard",
+        "Inventory & expense tracking",
         "Advanced analytics",
         "Priority support",
         "Custom branding",
