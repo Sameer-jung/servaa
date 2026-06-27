@@ -18,7 +18,7 @@ npm install
 
 1. Go to [supabase.com](https://supabase.com) and create a project
 2. Note your project URL and anon key from Settings → API
-3. Get the service_role key (for QR generation)
+3. Get the service_role key (used server-side for privileged operations — orders, QR generation, inventory, billing)
 
 ### 3. Set Environment Variables
 
@@ -36,29 +36,35 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ### 4. Initialize Database
 
-#### Option A: Using Supabase SQL Editor
-1. Open Supabase Dashboard → SQL Editor
-2. Run `database/schema.sql`
-3. Run `database/rls_policies.sql`
+Run these files **in order** via Supabase Dashboard → SQL Editor (or `psql "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres" -f database/<file>`):
 
-#### Option B: Using psql (if you have direct DB access)
-```bash
-psql "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres" -f database/schema.sql
-```
+1. `database/schema.sql`
+2. `database/rls_policies.sql`
+3. `database/scalability.sql`
+4. `database/add_modifiers.sql`
+5. `database/001_order_item_cancellation.sql` (no-op on a fresh `schema.sql` — safe to run)
+6. `database/002_security_fixes.sql` (must run after `rls_policies.sql` and `add_modifiers.sql`)
+7. `database/003_item_name_snapshot.sql`
+8. `database/fix_duplicate_invoices.sql`
+9. `database/004_inventory_expenses.sql`
+10. `database/005_inventory_categories.sql`
+11. `database/006_atomic_order_creation.sql`
+12. `database/007_billing_splits_payments.sql`
+13. `database/008_remove_bill_split_concept.sql`
+14. `database/009_bill_customer_name.sql`
+
+Skip `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, and `add_waiter_request.sql` — these are early migrations already consolidated into `schema.sql` (or unused). See [CLAUDE.md](CLAUDE.md) for the full rationale per migration.
+
+Alternatively, `npm run db:migrate` applies just `database/schema.sql` to `DATABASE_URL` (fresh local DB only) — you'd still need to run the rest of the list above manually after.
 
 ### 5. Enable Realtime
 
 1. Supabase Dashboard → Database → Replication
-2. Enable Realtime for: `orders`, `order_items`, `invoices`
+2. Enable Realtime for: `orders`, `order_items`, `invoices`, `service_requests`
 
-### 6. Create Storage Bucket
+(Inventory and expense tables are intentionally excluded — that UI refetches on mutation instead.)
 
-1. Supabase Dashboard → Storage
-2. Create bucket `qr-codes`
-3. Make it Public
-4. Add bucket policy for public read access
-
-### 7. Run Development Server
+### 6. Run Development Server
 
 ```bash
 npm run dev
@@ -66,13 +72,13 @@ npm run dev
 
 Visit `http://localhost:3000`
 
-### 8. Create First Account
+### 7. Create First Account
 
 1. Go to `http://localhost:3000/register`
 2. Enter restaurant name, email, password
 3. This creates both a user account and restaurant
 
-### 9. Test the Flow
+### 8. Test the Flow
 
 1. Go to Dashboard → Tables
 2. Add a table (e.g., "Table 1")
@@ -112,7 +118,10 @@ npm run db:types
 ### Project Commands
 
 ```bash
-npm run dev      # Start dev server
-npm run build    # Production build
-npm run lint     # Run ESLint
+npm run dev          # Start dev server
+npm run build        # Production build
+npm run lint         # Run ESLint
+npm run db:types     # Regenerate src/types/supabase.ts from live Supabase schema
+npm run db:migrate   # Apply database/schema.sql to DATABASE_URL (fresh local DB only)
+npx tsc --noEmit     # TypeScript check without building
 ```

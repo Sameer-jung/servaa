@@ -16,6 +16,7 @@ import { MenuCategory, MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
 import { writeAuditLog } from '@/utils/audit'
 import { isUuid, readTrimmedString, validatePrice } from '@/utils/validation'
+import { MAX_RAW_MENU_IMAGE_BYTES, deleteMenuImageIfOwned, uploadMenuImage } from '@/lib/menuImages'
 
 type EditableModifier = {
   id: string
@@ -85,6 +86,10 @@ function MenuContent() {
   const [modifierGroups, setModifierGroups] = useState<EditableModifierGroup[]>([])
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [itemImageUrl, setItemImageUrl] = useState('')
+  const [originalImageUrl, setOriginalImageUrl] = useState('')
+  const [imageUrlMode, setImageUrlMode] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
 
@@ -121,19 +126,72 @@ function MenuContent() {
   const openNewItemModal = () => {
     setEditingItem(null)
     setModifierGroups([])
+    setItemImageUrl('')
+    setOriginalImageUrl('')
+    setImageUrlMode(false)
     setShowItemModal(true)
   }
 
   const openEditItemModal = (item: MenuItem) => {
     setEditingItem(item)
     setModifierGroups(normalizeModifierGroups(item))
+    setItemImageUrl(item.image_url || '')
+    setOriginalImageUrl(item.image_url || '')
+    setImageUrlMode(false)
     setShowItemModal(true)
   }
 
-  const closeItemModal = () => {
+  // Resets modal state without touching storage — used after a successful
+  // save, where the current itemImageUrl is now the live, saved image.
+  const resetItemModalState = () => {
     setShowItemModal(false)
     setEditingItem(null)
     setModifierGroups([])
+    setItemImageUrl('')
+    setOriginalImageUrl('')
+    setImageUrlMode(false)
+  }
+
+  // Used for cancel (X button / backdrop click): if the admin uploaded or
+  // pasted a new photo but never saved, delete the now-unreferenced upload
+  // so it doesn't sit in storage forever.
+  const closeItemModal = () => {
+    if (itemImageUrl && itemImageUrl !== originalImageUrl) {
+      void deleteMenuImageIfOwned(supabase, itemImageUrl)
+    }
+    resetItemModalState()
+  }
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !restaurant) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.')
+      return
+    }
+
+    if (file.size > MAX_RAW_MENU_IMAGE_BYTES) {
+      toast.error('Image is too large (max 15MB).')
+      return
+    }
+
+    setImageUploading(true)
+    try {
+      const newUrl = await uploadMenuImage(supabase, restaurant.id, file)
+      // The image being replaced was uploaded this session and never saved
+      // anywhere, so it's safe to delete outright rather than leaving it orphaned.
+      if (itemImageUrl && itemImageUrl !== originalImageUrl) {
+        void deleteMenuImageIfOwned(supabase, itemImageUrl)
+      }
+      setItemImageUrl(newUrl)
+    } catch (uploadError) {
+      console.error('[MenuPage] image upload error:', uploadError)
+      toast.error(uploadError instanceof Error ? uploadError.message : 'Image upload failed. Please try again.')
+    } finally {
+      setImageUploading(false)
+    }
   }
 
   useEffect(() => {
@@ -341,7 +399,7 @@ function MenuContent() {
     const form = e.currentTarget
     const name = readTrimmedString((form.elements.namedItem('name') as HTMLInputElement).value, 100)
     const description = readTrimmedString((form.elements.namedItem('description') as HTMLInputElement).value, 500)
-    const rawImageUrl = (form.elements.namedItem('image_url') as HTMLInputElement).value
+    const rawImageUrl = itemImageUrl
     const imageUrl = rawImageUrl.trim() ? readOptionalUrl(rawImageUrl) : null
     const price = validatePrice((form.elements.namedItem('price') as HTMLInputElement).value)
     const categoryIdValue = (form.elements.namedItem('category_id') as HTMLSelectElement).value
@@ -386,6 +444,12 @@ function MenuContent() {
         return
       }
 
+      // image_url is already committed above, so clean up the old file now —
+      // independent of whether the modifier-group save below succeeds.
+      if (originalImageUrl && originalImageUrl !== imageUrl) {
+        void deleteMenuImageIfOwned(supabase, originalImageUrl)
+      }
+
       const modifiersSaved = await saveModifierGroups(editingItem.id)
       if (!modifiersSaved) return
 
@@ -423,7 +487,7 @@ function MenuContent() {
       toast.success(MESSAGES.menu.itemCreateSuccess);
     }
 
-    closeItemModal()
+    resetItemModalState()
     notifyMenuChanged()
     fetchData()
   }
@@ -431,11 +495,16 @@ function MenuContent() {
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Delete this item?')) return
     setError('')
+    const deletedItem = items.find((item) => item.id === id)
     const { error } = await supabase.from('menu_items').delete().eq('id', id)
     if (error) {
       console.error('[MenuPage] menu item delete error:', error.message)
       toast.error(MESSAGES.menu.saveFailed);
       return
+    }
+
+    if (deletedItem?.image_url) {
+      void deleteMenuImageIfOwned(supabase, deletedItem.image_url)
     }
 
     if (restaurant) {
@@ -692,7 +761,51 @@ function MenuContent() {
         <form onSubmit={handleSaveItem} className="flex max-h-[70vh] flex-col overflow-y-auto space-y-4">
           <Input name="name" label="Item Name" defaultValue={editingItem?.name || ''} required />
           <Input name="description" label="Description" defaultValue={editingItem?.description || ''} />
-          <Input name="image_url" label="Image URL" type="url" placeholder="https://example.com/item.jpg" defaultValue={editingItem?.image_url || ''} />
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Photo</label>
+            <div className="flex items-center gap-3">
+              <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                {itemImageUrl ? (
+                  <img src={itemImageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-500">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {imageUrlMode ? (
+                  <Input
+                    type="url"
+                    placeholder="https://example.com/item.jpg"
+                    value={itemImageUrl}
+                    onChange={(event) => setItemImageUrl(event.target.value)}
+                  />
+                ) : (
+                  <label className="inline-flex cursor-pointer items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+                    {imageUploading ? 'Uploading…' : 'Upload Photo'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={imageUploading}
+                      onChange={handleImageFileChange}
+                    />
+                  </label>
+                )}
+                <button
+                  type="button"
+                  disabled={imageUploading}
+                  className="block text-xs font-medium text-brand-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => setImageUrlMode((current) => !current)}
+                >
+                  {imageUrlMode ? 'Upload a photo instead' : 'Paste an image URL instead'}
+                </button>
+              </div>
+            </div>
+          </div>
           <Input name="price" label="Price" type="number" step="0.01" min="0" defaultValue={editingItem?.price || ''} required />
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-200">Category</label>
@@ -817,7 +930,7 @@ function MenuContent() {
             )}
           </div>
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={imageUploading}>
             {editingItem ? 'Update' : 'Create'}
           </Button>
         </form>
