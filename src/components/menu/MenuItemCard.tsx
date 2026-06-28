@@ -4,7 +4,6 @@
 
 import { MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
-import { Button } from '@/components/ui/Button'
 
 interface MenuItemCardProps {
   item: MenuItem
@@ -19,143 +18,120 @@ export function MenuItemCard({ item, quantity, currency, onAdd, onRemove, varian
   const isAvailable = item.available
   const hasModifiers = Boolean(item.modifier_groups?.length)
 
-  if (variant === 'grid') {
-    return (
-      <div
-        className={
-          isAvailable
-            ? 'flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm'
-            : 'flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-gray-50 opacity-75 shadow-sm'
-        }
-      >
-        <div className="relative h-28 w-full overflow-hidden bg-gray-100 sm:h-32">
-          {item.image_url ? (
-            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-gray-300">
-              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            </div>
-          )}
-          {!isAvailable && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-700">
-                Out of Stock
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-1 flex-col p-2 sm:p-3">
-          <h3 className="line-clamp-1 text-xs font-semibold text-gray-900 sm:text-sm">{item.name}</h3>
-          {item.description && (
-            <p className="mt-0.5 line-clamp-1 text-[10px] text-gray-500 sm:text-xs">{item.description}</p>
-          )}
-          <div className="mt-1.5 flex items-center justify-between gap-1">
-            <p className="text-xs font-semibold text-gray-900 sm:text-sm">{formatCurrency(item.price, currency)}</p>
-            {!isAvailable ? (
-              <span className="text-[10px] text-gray-400">Unavailable</span>
-            ) : quantity > 0 ? (
-              <div className="flex items-center gap-0.5 sm:gap-1">
-                <button
-                  onClick={onRemove}
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-sm text-gray-600 active:bg-gray-200 sm:h-7 sm:w-7"
-                >
-                  −
-                </button>
-                <span className="min-w-[1rem] text-center text-xs font-medium sm:text-sm">{quantity}</span>
-                <button
-                  onClick={onAdd}
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-sm text-white active:bg-brand-700 sm:h-7 sm:w-7"
-                >
-                  +
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={onAdd}
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white active:bg-brand-700 sm:h-7 sm:w-7"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+if (variant === 'grid') {
   return (
-    <div className={isAvailable ? 'flex gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm' : 'flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 opacity-75 shadow-sm'}>
-      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+    <div
+      className={
+        isAvailable
+          ? "group flex min-h-[210px] flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition active:scale-[0.99]"
+          : "flex min-h-[210px] flex-col overflow-hidden rounded-xl border border-gray-100 bg-gray-50 opacity-75 shadow-sm"
+      }
+    >
+      <div className="relative h-28 w-full overflow-hidden bg-gray-100 sm:h-32">
         {item.image_url ? (
           <img
             src={item.image_url}
             alt={item.name}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-gray-300">
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg
+              className="h-10 w-10"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
           </div>
         )}
+
+        {!isAvailable && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-gray-700">
+              Out of Stock
+            </span>
+          </div>
+        )}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col justify-between">
-        <div>
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 break-words font-medium text-gray-900">{item.name}</h3>
-            {!isAvailable && (
-              <span className="flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                Out of Stock
-              </span>
+
+      <div className="flex flex-1 flex-col p-2.5">
+        <h3 className="line-clamp-1 text-xs font-bold leading-snug text-gray-950 sm:text-sm">
+          {" "}
+          {item.name}
+        </h3>
+
+        {item.description && (
+          <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-gray-500">
+            {" "}
+            {item.description}
+          </p>
+        )}
+
+        <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-brand-700 sm:text-sm">
+              {" "}
+              {formatCurrency(item.price, currency)}
+            </p>
+
+            {hasModifiers && isAvailable && (
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400">
+                Customizable
+              </p>
             )}
           </div>
-          {item.description && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{item.description}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-semibold text-gray-900">{formatCurrency(item.price, currency)}</p>
+
           {!isAvailable ? (
-            <Button size="sm" variant="secondary" disabled>
-              Out of Stock
-            </Button>
+            <button
+              disabled
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-lg font-semibold leading-none text-white shadow-lg shadow-brand-600/25 active:bg-brand-700"
+              aria-label="Unavailable"
+            >
+              +
+            </button>
           ) : quantity > 0 ? (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-1 py-1">
               <button
                 onClick={onRemove}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:bg-gray-200 sm:h-8 sm:w-8"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm font-bold text-gray-600 shadow-sm active:bg-gray-100"
+                aria-label={`Remove ${item.name}`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                </svg>
+                −
               </button>
-              <span className="min-w-[1.5rem] text-center text-sm font-medium">{quantity}</span>
+
+              <span className="min-w-[1rem] text-center text-xs font-bold text-gray-900">
+                {quantity}
+              </span>
+
               <button
                 onClick={onAdd}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-600 text-white active:bg-brand-700 sm:h-8 sm:w-8"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white shadow-sm active:bg-brand-700"
+                aria-label={`Add ${item.name}`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+                +
               </button>
             </div>
           ) : (
-            <Button size="sm" className="min-h-11 whitespace-nowrap sm:min-h-0" onClick={onAdd}>
-              {hasModifiers ? 'Customize' : 'Add to Order'}
-            </Button>
+            <button
+              onClick={onAdd}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xl font-semibold leading-none text-white shadow-lg shadow-brand-600/25 active:bg-brand-700"
+              aria-label={
+                hasModifiers ? `Customize ${item.name}` : `Add ${item.name}`
+              }
+            >
+              +
+            </button>
           )}
         </div>
       </div>
     </div>
-  )
+  );
+}
 }
