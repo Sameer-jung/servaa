@@ -12,6 +12,7 @@ import { ModifierModal } from '@/components/menu/ModifierModal'
 import { OrderSidebar } from '@/components/menu/OrderSidebar'
 import { Restaurant, Table, MenuCategory, MenuItem, Order, Modifier } from '@/types'
 import { cn } from '@/utils/cn'
+import { formatCurrency } from "@/utils/format";
 
 interface MenuClientProps {
   restaurant: Restaurant
@@ -146,6 +147,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               <h1 className="text-lg font-bold text-gray-900">
                 {restaurant.name}
               </h1>
+
               {table && (
                 <p className="text-xs text-gray-500">
                   Table {table.table_number}
@@ -212,7 +214,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       <div className="lg:flex lg:items-start lg:gap-0">
         {/* Left: menu column */}
         <div className="min-w-0 flex-1">
-
           {/* Menu items: category sections or filtered grid */}
           {!hasFilter ? (
             <div className="px-4 py-4">
@@ -232,7 +233,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                       {catItems.slice(0, 4).map((item) => (
                         <MenuItemCard
                           key={item.id}
@@ -254,7 +255,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
           ) : (
             <div className="px-4 py-4">
               {filteredItems.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {filteredItems.map((item) => (
                     <MenuItemCard
                       key={item.id}
@@ -275,7 +276,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
         {/* Right: order sidebar (desktop only) */}
         {table && (
           <div className="hidden w-80 flex-shrink-0 border-l border-gray-200 bg-white lg:block xl:w-96">
-            <div className="sticky top-[57px] max-h-[calc(100vh-57px)] overflow-y-auto p-4">
+            <div className="sticky top-14 max-h-[calc(100vh-57px)] overflow-y-auto p-4">
               <OrderSidebar
                 restaurantId={restaurant.id}
                 tableId={table.id}
@@ -300,14 +301,38 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             onAdd={handleAddItemWithModifiers}
             currency={restaurant.currency}
           />
-          <StickyCart
-            restaurantId={restaurant.id}
-            tableId={table.id}
-            tableToken={tableToken}
-            currency={restaurant.currency}
-            customerSessionId={customerSessionId}
-            onOrderPlaced={setTrackedOrder}
-          />
+          {hasCartItems && (
+            <button
+              type="button"
+              onClick={() => {
+                const cartElement = document.getElementById("customer-cart");
+                cartElement?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "end",
+                });
+              }}
+              className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-full bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-2xl shadow-brand-600/30 active:bg-brand-700 lg:hidden"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-brand-700">
+                {cart.totalItems}
+              </span>
+              View Cart
+              <span>
+                {formatCurrency(cart.totalPrice, restaurant.currency || "NPR")}
+              </span>
+            </button>
+          )}
+
+          <div id="customer-cart">
+            <StickyCart
+              restaurantId={restaurant.id}
+              tableId={table.id}
+              tableToken={tableToken}
+              currency={restaurant.currency || "NPR"}
+              customerSessionId={customerSessionId}
+              onOrderPlaced={setTrackedOrder}
+            />
+          </div>
           {!hasCartItems && (
             <CustomerActions
               restaurantId={restaurant.id}

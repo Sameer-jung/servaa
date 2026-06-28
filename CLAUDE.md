@@ -137,6 +137,7 @@ Run in order:
 12. `database/007_billing_splits_payments.sql` (adds `bills`, `bill_orders`, `bill_splits`, `bill_split_parts`, `bill_split_items`, `payments` — staff-side bill combining/splitting/partial payments, layered above `orders`/`invoices`)
 13. `database/008_remove_bill_split_concept.sql` (drops `bill_splits`/`bill_split_parts`/`bill_split_items` and `payments.bill_split_part_id` — per-person bill splitting was replaced by split-by-money payments; run after 007 for both fresh and existing installs)
 14. `database/009_bill_customer_name.sql` (adds nullable `bills.customer_name` — lets staff label an open bill with who it's owed by)
+15. `database/010_menu_image_storage.sql` (creates the public `menu-images` Supabase Storage bucket + staff-write/public-read RLS policies on `storage.objects` for menu item photo uploads)
 
 **Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
 
@@ -145,6 +146,15 @@ Enable Supabase Realtime on tables: `orders`, `order_items`, `invoices`, `servic
 ### Menu caching
 
 `src/lib/menuCache.ts` caches the public menu page's categories/items query (`getCachedMenu`) for 30 seconds, in-memory and per-restaurant — the menu page (`src/app/menu/[restaurantSlug]/page.tsx`) is the highest-traffic route since every table scan hits it. The dashboard menu editor (`src/app/(dashboard)/dashboard/menu/page.tsx`) calls `POST /api/menu/revalidate` (fire-and-forget, via `notifyMenuChanged`) after every category/item/modifier mutation to clear that restaurant's cache entry immediately rather than waiting out the TTL. If you add a new menu mutation path, call `notifyMenuChanged()` after it too.
+
+### Menu item photos
+
+The "Photo" field on the menu item form (`src/app/(dashboard)/dashboard/menu/page.tsx`) supports two input modes: uploading a file (default) or pasting an external URL (toggle link). Either way, the result is just written to `menu_items.image_url` — the column and downstream display code are unchanged.
+
+- **Upload path**: `src/lib/menuImages.ts` (`uploadMenuImage`) compresses the file client-side with `browser-image-compression` (max 1280px, re-encoded as WebP, ~300KB target) before uploading directly from the browser to the public `menu-images` Supabase Storage bucket via the existing browser Supabase client — the image bytes never pass through a Next.js server route. Objects are keyed `{restaurant_id}/{uuid}.webp`.
+- **Storage RLS** (`database/010_menu_image_storage.sql`) mirrors the `menu_items` policy shape: public SELECT, staff-only INSERT/UPDATE/DELETE, gated by `is_restaurant_staff()` against the first path segment (`storage.foldername(name)[1]`) rather than a join.
+- **Cleanup**: `deleteMenuImageIfOwned()` removes the old storage object when an item's photo is replaced (on save, comparing old vs new `image_url`) or when the item itself is deleted. It's a no-op for pasted external URLs (only deletes paths matching the `menu-images` public URL pattern), so it's always safe to call.
+- Do not delete the storage object eagerly at upload time (before save) — the modal can still be cancelled, which would orphan the image still shown in the now-discarded draft.
 
 ### Security headers
 
@@ -163,6 +173,15 @@ SUPABASE_SERVICE_ROLE_KEY     # server-only, never expose to browser
 NEXT_PUBLIC_APP_URL           # base URL for QR links (Vercel also reads VERCEL_URL)
 ```
 
+### Supabase environments
+
+There are two separate Supabase projects, not one shared project:
+
+- **`servaa-test`** — local development and testing. Safe to break/reset. Local `.env.local` points here.
+- **`servaa-prod`** — production, real restaurant/customer data. Vercel's Production environment variables point here.
+
+Both are owned by the same personal email and `servaaqr@gmail.com` (Owner on both, for backup access). Apply schema changes to both via the numbered migration files in the same order (see "Database setup" below) — never hand-edit one project's schema in the dashboard without applying the same change to the other. Auth Site URL, the Realtime publication (`ALTER PUBLICATION`), and other dashboard-only settings (not captured in any `.sql` file) must be configured separately on each project. The `menu-images` Storage bucket (created by `010_menu_image_storage.sql`) also needs its bucket-level public/CORS settings verified independently on each project after running the migration.
+
 ## Patterns to preserve
 
 - Do not duplicate cart state, order creation APIs, or RBAC role models.
@@ -177,6 +196,7 @@ NEXT_PUBLIC_APP_URL           # base URL for QR links (Vercel also reads VERCEL_
 - When adding a new local type for order items in a component, always include `item_name_snapshot?: string | null`.
 - Do not write `inventory_items.current_quantity` directly — it is maintained by the `stock_movements` trigger. Record a movement instead.
 - Do not record stock movements or expenses by writing directly to Supabase from the client — always go through `/api/inventory/movements` and `/api/expenses`. Expenses are owner-only.
+- Menu item photo uploads must go through `uploadMenuImage`/`deleteMenuImageIfOwned` (`src/lib/menuImages.ts`), not raw `supabase.storage` calls — keeps compression, key naming, and orphan cleanup consistent.
 
 ## Known debt
 
