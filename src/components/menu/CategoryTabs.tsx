@@ -11,7 +11,7 @@ interface MenuCategoryTabsProps {
 
 export function MenuCategoryTabs({ categories, activeCategory, onSelect }: MenuCategoryTabsProps) {
   return (
-    <div className="sticky top-[57px] z-30 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
+    <div className="border-t border-gray-100 bg-white">
       <div className="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-hide">
         <button
           onClick={() => onSelect(null)}
