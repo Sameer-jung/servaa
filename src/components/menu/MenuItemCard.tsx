@@ -256,4 +256,3 @@ if (variant === "grid") {
     </div>
   );
 }
-}
