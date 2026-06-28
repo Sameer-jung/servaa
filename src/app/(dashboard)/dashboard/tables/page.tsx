@@ -2,7 +2,7 @@
 
 import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +13,7 @@ import { PageLoading } from '@/components/dashboard/PageLoading'
 import { QRCodeDisplay } from '@/components/tables/QRCodeDisplay'
 import { Table } from '@/types'
 import { validateSlug, validateTableNumber } from '@/utils/validation'
+
 
 function getTableErrorMessage(error: { code?: string; message?: string } | null) {
   if (!error) return ''
@@ -32,6 +33,8 @@ function TablesContent() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [generatingQR, setGeneratingQR] = useState<string | null>(null)
+  const [addingTable, setAddingTable] = useState(false);
+  const addTableInFlightRef = useRef(false);
   const [error, setError] = useState('')
   const { restaurant, loading: restaurantLoading } = useRestaurant()
   const supabase = createClient()
@@ -58,39 +61,54 @@ function TablesContent() {
     fetchTables()
   }, [fetchTables])
 
-  const handleAddTable = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError('')
-    if (!restaurant) return
+const handleAddTable = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
 
-    const form = e.currentTarget
-    const tableNumber = validateTableNumber((form.elements.namedItem('table_number') as HTMLInputElement).value)
+  if (addTableInFlightRef.current) return;
+
+  addTableInFlightRef.current = true;
+  setAddingTable(true);
+  setError("");
+
+  try {
+    if (!restaurant) return;
+
+    const form = e.currentTarget;
+    const tableNumber = validateTableNumber(
+      (form.elements.namedItem("table_number") as HTMLInputElement).value,
+    );
 
     if (!tableNumber) {
-      setError('Table number must be 1 to 32 letters, numbers, spaces, periods, dashes, or underscores.')
-      return
+      setError(
+        "Table number must be 1 to 32 letters, numbers, spaces, periods, dashes, or underscores.",
+      );
+      return;
     }
 
     const { data: newTable, error: tableError } = await supabase
-      .from('tables')
+      .from("tables")
       .insert({ restaurant_id: restaurant.id, table_number: tableNumber })
       .select()
-      .single()
+      .single();
 
     if (tableError) {
-      setError(getTableErrorMessage(tableError))
+      setError(getTableErrorMessage(tableError));
       toast.error(MESSAGES.tables.addFailed);
-      return
+      return;
     }
 
     if (newTable) {
-      await generateQRForTable(newTable)
+      await generateQRForTable(newTable);
       toast.success(MESSAGES.tables.addSuccess);
     }
 
-    setShowModal(false)
-    fetchTables()
+    setShowModal(false);
+    fetchTables();
+  } finally {
+    addTableInFlightRef.current = false;
+    setAddingTable(false);
   }
+};
 
   const generateQRForTable = async (table: Table) => {
     setError('')
@@ -148,10 +166,16 @@ function TablesContent() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Tables</h1>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Manage tables and QR codes</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            Tables
+          </h1>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            Manage tables and QR codes
+          </p>
         </div>
-        <Button disabled={!restaurant} onClick={() => setShowModal(true)}>+ Add Table</Button>
+        <Button disabled={!restaurant} onClick={() => setShowModal(true)}>
+          + Add Table
+        </Button>
       </div>
 
       {error && (
@@ -165,23 +189,43 @@ function TablesContent() {
           {tables.map((table) => (
             <div key={table.id} className="relative">
               {table.qr_code ? (
-                <QRCodeDisplay tableNumber={table.table_number} qrCodeUrl={table.qr_code} restaurantName={restaurant?.name || ''} />
+                <QRCodeDisplay
+                  tableNumber={table.table_number}
+                  qrCodeUrl={table.qr_code}
+                  restaurantName={restaurant?.name || ""}
+                />
               ) : (
                 <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex aspect-square items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-950">
-                    <Button size="sm" isLoading={generatingQR === table.id} onClick={() => generateQRForTable(table)}>
+                    <Button
+                      size="sm"
+                      isLoading={generatingQR === table.id}
+                      onClick={() => generateQRForTable(table)}
+                    >
                       Generate QR
                     </Button>
                   </div>
-                  <p className="mt-2 text-center text-sm font-semibold text-gray-700 dark:text-gray-200">Table {table.table_number}</p>
+                  <p className="mt-2 text-center text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    Table {table.table_number}
+                  </p>
                 </div>
               )}
               <button
                 onClick={() => handleDeleteTable(table.id)}
                 className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200"
               >
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -192,22 +236,52 @@ function TablesContent() {
           title="No tables"
           description="Add tables to generate QR codes for customers."
           icon={
-            <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            <svg
+              className="h-12 w-12"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 6h16M4 10h16M4 14h16M4 18h16"
+              />
             </svg>
           }
-          action={<Button disabled={!restaurant} onClick={() => setShowModal(true)}>Add First Table</Button>}
+          action={
+            <Button disabled={!restaurant} onClick={() => setShowModal(true)}>
+              Add First Table
+            </Button>
+          }
         />
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add New Table">
+      <Modal
+        isOpen={showModal}
+        onClose={() => !addingTable && setShowModal(false)}
+        title="Add New Table"
+      >
         <form onSubmit={handleAddTable} className="space-y-4">
-          <Input name="table_number" label="Table Number" placeholder="e.g., 1, A1, Patio-2" required />
-          <Button type="submit" className="w-full">Add Table & Generate QR</Button>
+          <Input
+            name="table_number"
+            label="Table Number"
+            placeholder="e.g., 1, A1, Patio-2"
+            required
+          />
+          <Button
+            type="submit"
+            className="w-full"
+            isLoading={addingTable}
+            disabled={addingTable}
+          >
+            {addingTable ? "Creating Table..." : "Add Table & Generate QR"}
+          </Button>
         </form>
       </Modal>
     </div>
-  )
+  );
 }
 
 export default function TablesPage() {
