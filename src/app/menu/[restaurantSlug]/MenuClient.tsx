@@ -134,25 +134,64 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
   return (
     <div
       className={cn(
-        'min-h-screen bg-gray-50',
-        hasCartItems ? 'pb-80 lg:pb-0' : 'pb-32 lg:pb-0',
+        "min-h-screen bg-gray-50",
+        hasCartItems ? "pb-80 lg:pb-0" : "pb-32 lg:pb-0",
       )}
     >
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">{restaurant.name}</h1>
-            {table && (
-              <p className="text-xs text-gray-500">
-                Table {table.table_number}
-                {' · '}
-                <span className="font-medium text-green-500">Open</span>
-              </p>
-            )}
+      {/* Sticky Header + Search + Categories */}
+      <div className="sticky top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
+        <header>
+          <div className="flex items-center justify-between px-4 py-3">
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">
+                {restaurant.name}
+              </h1>
+              {table && (
+                <p className="text-xs text-gray-500">
+                  Table {table.table_number}
+                  {" · "}
+                  <span className="font-medium text-green-500">Open</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+
+            <input
+              type="search"
+              placeholder="Search dishes, drinks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
           </div>
         </div>
-      </header>
+
+        <MenuCategoryTabs
+          categories={categories}
+          activeCategory={activeCategory}
+          onSelect={(cat) => {
+            setActiveCategory(cat);
+            setSearchQuery("");
+          }}
+        />
+      </div>
 
       {/* Active Order Tracker */}
       {trackedOrder && table && (
@@ -173,41 +212,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       <div className="lg:flex lg:items-start lg:gap-0">
         {/* Left: menu column */}
         <div className="min-w-0 flex-1">
-          {/* Search bar */}
-          <div className="px-4 pt-3">
-            <div className="relative">
-              <svg
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <input
-                type="search"
-                placeholder="Search dishes, drinks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-              />
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <MenuCategoryTabs
-            categories={categories}
-            activeCategory={activeCategory}
-            onSelect={(cat) => {
-              setActiveCategory(cat)
-              setSearchQuery('')
-            }}
-          />
 
           {/* Menu items: category sections or filtered grid */}
           {!hasFilter ? (
@@ -216,7 +220,9 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
                 {categoryGroups.map(({ category, items: catItems }) => (
                   <section key={category.id}>
                     <div className="mb-3 flex items-center justify-between">
-                      <h2 className="text-base font-bold text-gray-900">{category.name}</h2>
+                      <h2 className="text-base font-bold text-gray-900">
+                        {category.name}
+                      </h2>
                       {catItems.length > 4 && (
                         <button
                           onClick={() => setActiveCategory(category.id)}
@@ -226,9 +232,13 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                       {catItems.slice(0, 4).map((item) => (
-                        <MenuItemCard key={item.id} {...itemCardProps(item)} variant="grid" />
+                        <MenuItemCard
+                          key={item.id}
+                          {...itemCardProps(item)}
+                          variant="grid"
+                        />
                       ))}
                     </div>
                   </section>
@@ -244,9 +254,13 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
           ) : (
             <div className="px-4 py-4">
               {filteredItems.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {filteredItems.map((item) => (
-                    <MenuItemCard key={item.id} {...itemCardProps(item)} variant="grid" />
+                    <MenuItemCard
+                      key={item.id}
+                      {...itemCardProps(item)}
+                      variant="grid"
+                    />
                   ))}
                 </div>
               ) : (
@@ -315,5 +329,5 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
         </div>
       )}
     </div>
-  )
+  );
 }
