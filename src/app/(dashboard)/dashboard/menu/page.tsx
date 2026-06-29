@@ -5,6 +5,7 @@
 import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
 import { useState, useEffect, useCallback, Suspense } from 'react'
+import { Layers, Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestaurant } from '@/hooks/useRestaurant'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +18,7 @@ import { formatCurrency } from '@/utils/format'
 import { writeAuditLog } from '@/utils/audit'
 import { isUuid, readTrimmedString, validatePrice } from '@/utils/validation'
 import { MAX_RAW_MENU_IMAGE_BYTES, deleteMenuImageIfOwned, uploadMenuImage } from '@/lib/menuImages'
+import { cn } from '@/utils/cn'
 
 type EditableModifier = {
   id: string
@@ -822,106 +824,147 @@ function MenuContent() {
           </label>
 
           <div className="space-y-3 border-t border-gray-100 pt-4 dark:border-gray-800">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Modifier Groups</h3>
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Add size, extras, or other choices for this item.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Customize Options</h3>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    For things customers pick before ordering — e.g. a &ldquo;Size&rdquo; group with &ldquo;Small / Medium / Large&rdquo; choices. Most items don&apos;t need this.
+                  </p>
+                </div>
               </div>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
+                className="flex-shrink-0 gap-1.5"
                 onClick={() => setModifierGroups((current) => [...current, createEmptyModifierGroup()])}
               >
-                + Group
+                <Plus className="h-3.5 w-3.5" />
+                Add Group
               </Button>
             </div>
 
             {modifierGroups.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 p-3 text-sm font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                No modifier groups for this item.
+              <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                No customize options yet — this item will be added to cart as-is. Click &ldquo;Add Group&rdquo; if customers should pick a size, flavor, or extra first.
               </div>
             ) : (
               <div className="space-y-3">
-                {modifierGroups.map((group) => (
-                  <div key={group.id} className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <Input
-                        label="Group Name"
-                        value={group.name}
-                        placeholder="Size"
-                        onChange={(event) => updateModifierGroup(group.id, { name: event.target.value })}
-                      />
+                {modifierGroups.map((group, groupIndex) => (
+                  <div key={group.id} className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                        Group {groupIndex + 1}
+                      </span>
                       <Button
                         type="button"
                         size="sm"
-                        variant="danger"
-                        className="self-end"
+                        variant="ghost"
+                        className="gap-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
                         onClick={() => setModifierGroups((current) => current.filter((candidate) => candidate.id !== group.id))}
                       >
-                        Delete
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove group
                       </Button>
                     </div>
 
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex min-h-11 items-center gap-2">
+                    <Input
+                      label="What is this choice called?"
+                      value={group.name}
+                      placeholder="e.g. Size, Toppings, Spice Level"
+                      onChange={(event) => updateModifierGroup(group.id, { name: event.target.value })}
+                    />
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label
+                        className={cn(
+                          'flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors',
+                          group.is_required
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
+                            : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900',
+                        )}
+                      >
                         <input
                           type="checkbox"
                           checked={group.is_required}
                           onChange={(event) => updateModifierGroup(group.id, { is_required: event.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                          className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-brand-600"
                         />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Required</span>
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">Customer must choose</span>
+                          <span className="block text-xs text-gray-500 dark:text-gray-400">They can&apos;t add this item without picking one first.</span>
+                        </span>
                       </label>
-                      <label className="flex min-h-11 items-center gap-2">
+                      <label
+                        className={cn(
+                          'flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors',
+                          group.is_multiselect
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
+                            : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900',
+                        )}
+                      >
                         <input
                           type="checkbox"
                           checked={group.is_multiselect}
                           onChange={(event) => updateModifierGroup(group.id, { is_multiselect: event.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-brand-600"
+                          className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-brand-600"
                         />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Multi-select</span>
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">Allow more than one</span>
+                          <span className="block text-xs text-gray-500 dark:text-gray-400">E.g. picking several toppings instead of just one.</span>
+                        </span>
                       </label>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 border-t border-gray-200 pt-3 dark:border-gray-800">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Options</p>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => addModifierOption(group.id)}>
-                          + Option
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Choices customers will see</p>
+                        <Button type="button" size="sm" variant="secondary" className="gap-1.5" onClick={() => addModifierOption(group.id)}>
+                          <Plus className="h-3.5 w-3.5" />
+                          Add Choice
                         </Button>
                       </div>
 
                       {group.modifiers.length === 0 ? (
-                        <p className="rounded-lg bg-white p-3 text-sm font-medium text-gray-500 dark:bg-gray-900 dark:text-gray-400">No options yet.</p>
+                        <p className="rounded-lg bg-white p-3 text-sm font-medium text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                          Add at least one choice, e.g. &ldquo;Small&rdquo;, &ldquo;Medium&rdquo;, &ldquo;Large&rdquo;.
+                        </p>
                       ) : (
-                        group.modifiers.map((modifier) => (
-                          <div key={modifier.id} className="grid gap-2 rounded-lg bg-white p-2 dark:bg-gray-900 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
-                            <Input
-                              label="Option Name"
-                              value={modifier.name}
-                              placeholder="Large"
-                              onChange={(event) => updateModifierOption(group.id, modifier.id, { name: event.target.value })}
-                            />
-                            <Input
-                              label="Price"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={modifier.price}
-                              onChange={(event) => updateModifierOption(group.id, modifier.id, { price: validatePrice(event.target.value) || 0 })}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="self-end"
-                              onClick={() => removeModifierOption(group.id, modifier.id)}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        ))
+                        <div className="space-y-2">
+                          {group.modifiers.map((modifier) => (
+                            <div key={modifier.id} className="grid items-end gap-2 rounded-lg bg-white p-2.5 dark:bg-gray-900 sm:grid-cols-[minmax(0,1fr)_7rem_auto]">
+                              <Input
+                                label="Name"
+                                value={modifier.name}
+                                placeholder="e.g. Large"
+                                onChange={(event) => updateModifierOption(group.id, modifier.id, { name: event.target.value })}
+                              />
+                              <Input
+                                label="Extra cost"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0"
+                                value={modifier.price}
+                                onChange={(event) => updateModifierOption(group.id, modifier.id, { price: validatePrice(event.target.value) || 0 })}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="self-end text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                aria-label="Remove choice"
+                                onClick={() => removeModifierOption(group.id, modifier.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>

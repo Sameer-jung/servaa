@@ -4,9 +4,11 @@ import toast from "react-hot-toast";
 import { MESSAGES } from "@/utils/messages";
 import { useState } from 'react'
 import posthog from 'posthog-js'
+import { Droplet, Bell, Receipt, ConciergeBell, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency } from '@/utils/format'
+import { cn } from '@/utils/cn'
 import type { Modifier } from '@/types'
 
 interface CustomerActionsProps {
@@ -38,6 +40,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
   const [showOrderFirst, setShowOrderFirst] = useState(false)
   const [billData, setBillData] = useState<ActiveBillData | null>(null)
   const [showBillModal, setShowBillModal] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const fetchBillData = async (): Promise<ActiveBillData | null> => {
     const params = new URLSearchParams({ tableId })
@@ -93,6 +96,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
   }
 
   const handleActionClick = async (type: 'water' | 'bill' | 'waiter') => {
+    setIsExpanded(false)
     setRequesting(type)
 
     if (type === 'bill') {
@@ -157,42 +161,81 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white px-3 py-3 shadow-lg sm:px-4 lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-3 gap-2 sm:gap-3">
-          <Button
-            variant="outline"
-            className="min-w-0 gap-1.5 px-2 text-sm sm:gap-2 sm:px-4"
-            isLoading={requesting === 'water'}
+      {isExpanded && (
+        <button
+          type="button"
+          aria-label="Close actions"
+          onClick={() => setIsExpanded(false)}
+          className="fixed inset-0 z-40 bg-black/10 lg:hidden"
+        />
+      )}
+
+      {/* z-50 matches StickyCart's floating-button convention — anything
+          lower gets hidden behind StickyCart's full-width "Order sent to the
+          kitchen" confirmation bar (z-40), which stays up indefinitely after
+          an order is placed, the same moment this FAB mounts. */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2 lg:hidden">
+        <div
+          className={cn(
+            'flex flex-col items-end gap-2 transition-all duration-200',
+            isExpanded
+              ? 'translate-y-0 opacity-100'
+              : 'pointer-events-none translate-y-2 opacity-0',
+          )}
+        >
+          <button
+            type="button"
             onClick={() => handleActionClick('water')}
+            disabled={requesting !== null}
+            className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-100 active:bg-gray-50 disabled:opacity-60"
           >
-            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <span className="truncate">{confirmed === 'water' ? 'Requested!' : 'Water'}</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="min-w-0 gap-1.5 px-2 text-sm sm:gap-2 sm:px-4"
-            isLoading={requesting === 'waiter'}
+            <Droplet className="h-4 w-4 flex-shrink-0 text-brand-600" />
+            {confirmed === 'water' ? 'Requested!' : 'Water'}
+          </button>
+          <button
+            type="button"
             onClick={() => handleActionClick('waiter')}
+            disabled={requesting !== null}
+            className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-100 active:bg-gray-50 disabled:opacity-60"
           >
-            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span className="truncate">{confirmed === 'waiter' ? 'Requested!' : 'Waiter'}</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="min-w-0 gap-1.5 px-2 text-sm sm:gap-2 sm:px-4"
-            isLoading={requesting === 'bill'}
+            <Bell className="h-4 w-4 flex-shrink-0 text-brand-600" />
+            {confirmed === 'waiter' ? 'Requested!' : 'Waiter'}
+          </button>
+          <button
+            type="button"
             onClick={() => handleActionClick('bill')}
+            disabled={requesting !== null}
+            className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-100 active:bg-gray-50 disabled:opacity-60"
           >
-            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            <span className="truncate">{confirmed === 'bill' ? 'Requested!' : 'Bill'}</span>
-          </Button>
+            <Receipt className="h-4 w-4 flex-shrink-0 text-brand-600" />
+            {confirmed === 'bill' ? 'Requested!' : 'Bill'}
+          </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsExpanded((open) => !open)}
+          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-2xl shadow-brand-600/30 transition-transform active:scale-95"
+          aria-label={isExpanded ? 'Close actions' : 'Need help?'}
+          aria-expanded={isExpanded}
+        >
+          <span
+            className={cn(
+              'absolute transition-all duration-200',
+              isExpanded ? 'rotate-90 opacity-0' : 'rotate-0 opacity-100',
+            )}
+          >
+            <ConciergeBell className="h-6 w-6" />
+          </span>
+          <span
+            className={cn(
+              'absolute transition-all duration-200',
+              isExpanded ? 'rotate-0 opacity-100' : '-rotate-90 opacity-0',
+            )}
+          >
+            <X className="h-6 w-6" />
+          </span>
+        </button>
       </div>
 
       <Modal isOpen={showOrderFirst} onClose={() => setShowOrderFirst(false)} title="Order something first">

@@ -17,16 +17,22 @@ interface ModifierModalProps {
   item: MenuItem | null
   isOpen: boolean
   onClose: () => void
-  onAdd: (item: MenuItem, modifiers: Modifier[]) => void
+  onAdd: (item: MenuItem, modifiers: Modifier[], quantity: number, notes: string) => void
   currency?: string
 }
 
 export function ModifierModal({ item, isOpen, onClose, onAdd, currency }: ModifierModalProps) {
   const [selectedModifiers, setSelectedModifiers] = useState<ModifierSelections>({})
+  const [quantity, setQuantity] = useState(1)
+  const [notes, setNotes] = useState('')
 
   // Reset state when a new item is selected
   useEffect(() => {
-    if (item) setSelectedModifiers({})
+    if (item) {
+      setSelectedModifiers({})
+      setQuantity(1)
+      setNotes('')
+    }
   }, [item])
 
   if (!item || !item.modifier_groups) return null
@@ -37,12 +43,12 @@ export function ModifierModal({ item, isOpen, onClose, onAdd, currency }: Modifi
 
   const isValid = isModifierSelectionValid(item, selectedModifiers)
   const selectedModifierRecords = getSelectedModifierRecords(item, selectedModifiers)
-  const finalPrice = calculateItemTotal(item.price, selectedModifierRecords)
+  const finalPrice = calculateItemTotal(item.price, selectedModifierRecords) * quantity
 
   const handleAddToCart = () => {
     if (!isValid) return
 
-    onAdd(item, selectedModifierRecords)
+    onAdd(item, selectedModifierRecords, quantity, notes)
     onClose()
   }
 
@@ -108,20 +114,45 @@ export function ModifierModal({ item, isOpen, onClose, onAdd, currency }: Modifi
             </div>
           )
         })}
+
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h4 className="mb-3 font-semibold text-gray-900">Cooking note</h4>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="E.g. no onions, extra spicy..."
+            rows={2}
+            className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
       </div>
 
-      <div className="sticky bottom-0 mt-0 grid gap-2 border-t border-gray-200 bg-white p-4 sm:static sm:mt-4 sm:grid-cols-2 sm:p-0 sm:pt-4">
+      <div className="sticky bottom-0 mt-0 flex items-center gap-2 border-t border-gray-200 bg-white p-4 sm:static sm:mt-4 sm:p-0 sm:pt-4">
+        <div className="flex flex-shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white px-1 py-1">
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-gray-700 active:bg-gray-100"
+            aria-label="Decrease quantity"
+          >
+            −
+          </button>
+          <span className="min-w-[1.75rem] text-center text-base font-bold text-gray-900">
+            {quantity}
+          </span>
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => q + 1)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-gray-700 active:bg-gray-100"
+            aria-label="Increase quantity"
+          >
+            +
+          </button>
+        </div>
+
         <Button
-          type="button"
-          variant="outline"
-          className="h-12 w-full text-base sm:order-first"
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
-        <Button 
-          className="h-12 w-full text-base" 
-          disabled={!isValid} 
+          className="h-12 flex-1 text-base"
+          disabled={!isValid}
           onClick={handleAddToCart}
         >
           Add to Cart - {formatCurrency(finalPrice, currency)}
