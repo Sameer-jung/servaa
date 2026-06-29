@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
 
 export function MarkHandledButton({ messageId }: { messageId: string }) {
   const [loading, setLoading] = useState(false)
+  const [isRefreshing, startRefresh] = useTransition()
   const router = useRouter()
 
   const handleClick = async () => {
@@ -23,14 +24,18 @@ export function MarkHandledButton({ messageId }: { messageId: string }) {
       }
 
       toast.success('Message marked handled.')
-      router.refresh()
+      // Keep the button's loading state visible through the refetch, not
+      // just the PATCH call — otherwise the card looks stale for a beat.
+      startRefresh(() => {
+        router.refresh()
+      })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Button variant="secondary" size="sm" isLoading={loading} onClick={handleClick}>
+    <Button variant="secondary" size="sm" isLoading={loading || isRefreshing} onClick={handleClick}>
       Mark handled
     </Button>
   )

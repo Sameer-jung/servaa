@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 export function SuspendToggleButton({ restaurantId, isActive }: { restaurantId: string; isActive: boolean }) {
   const [loading, setLoading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [isRefreshing, startRefresh] = useTransition()
   const router = useRouter()
 
   const performToggle = async () => {
@@ -28,7 +29,12 @@ export function SuspendToggleButton({ restaurantId, isActive }: { restaurantId: 
 
       toast.success(isActive ? 'Restaurant suspended.' : 'Restaurant activated.')
       setConfirmOpen(false)
-      router.refresh()
+      // Keep the button's loading state visible through the refetch, not
+      // just the PATCH call — otherwise the button looks done while the
+      // page is still showing stale data for another moment.
+      startRefresh(() => {
+        router.refresh()
+      })
     } finally {
       setLoading(false)
     }
@@ -47,7 +53,11 @@ export function SuspendToggleButton({ restaurantId, isActive }: { restaurantId: 
 
   return (
     <>
-      <Button variant={isActive ? 'danger' : 'primary'} isLoading={loading} onClick={handleClick}>
+      <Button
+        variant={isActive ? 'danger' : 'primary'}
+        isLoading={loading || isRefreshing}
+        onClick={handleClick}
+      >
         {isActive ? 'Suspend restaurant' : 'Activate restaurant'}
       </Button>
 
@@ -57,10 +67,10 @@ export function SuspendToggleButton({ restaurantId, isActive }: { restaurantId: 
           This takes effect right away.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={loading || isRefreshing}>
             Cancel
           </Button>
-          <Button variant="danger" isLoading={loading} onClick={performToggle}>
+          <Button variant="danger" isLoading={loading || isRefreshing} onClick={performToggle}>
             Suspend
           </Button>
         </div>
