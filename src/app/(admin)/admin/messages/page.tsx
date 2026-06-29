@@ -1,5 +1,7 @@
+import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { MarkHandledButton } from '@/components/admin/MarkHandledButton'
+import { ClientDateTime } from '@/components/admin/ClientDate'
 import { cn } from '@/utils/cn'
 
 interface PageProps {
@@ -27,7 +29,7 @@ export default async function AdminMessagesPage({ searchParams }: PageProps) {
 
       <div className="flex gap-2 text-sm">
         {(['new', 'handled', 'all'] as const).map((option) => (
-          <a
+          <Link
             key={option}
             href={`/admin/messages?status=${option}`}
             className={cn(
@@ -38,7 +40,7 @@ export default async function AdminMessagesPage({ searchParams }: PageProps) {
             )}
           >
             {option === 'all' ? 'All' : option === 'new' ? 'New' : 'Handled'}
-          </a>
+          </Link>
         ))}
       </div>
 
@@ -72,7 +74,7 @@ export default async function AdminMessagesPage({ searchParams }: PageProps) {
             </div>
             <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{message.message}</p>
             <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
-              {new Date(message.created_at).toLocaleString()}
+              <ClientDateTime value={message.created_at} />
             </p>
           </div>
         ))}

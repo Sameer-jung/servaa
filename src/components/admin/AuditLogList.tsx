@@ -1,3 +1,5 @@
+import { ClientDateTime } from './ClientDate'
+
 interface AuditLogEntry {
   id: string
   admin_user_id: string | null
@@ -52,7 +54,7 @@ export function AuditLogList({ logs, adminEmails, showTarget }: AuditLogListProp
               )}
             </span>
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              {new Date(log.created_at).toLocaleString()}
+              <ClientDateTime value={log.created_at} />
             </span>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">

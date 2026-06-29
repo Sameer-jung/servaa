@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getUserEmailMap } from '@/lib/admin/users'
 import { PlanBadge } from '@/components/admin/PlanBadge'
+import { ClientDate } from '@/components/admin/ClientDate'
 import { cn } from '@/utils/cn'
 
 interface PageProps {
@@ -114,7 +115,7 @@ export default async function AdminRestaurantsPage({ searchParams }: PageProps) 
                   <PlanBadge plan={restaurant.plan} trialEndsAt={restaurant.trial_ends_at} />
                 </td>
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
-                  {new Date(restaurant.created_at).toLocaleDateString()}
+                  <ClientDate value={restaurant.created_at} />
                 </td>
               </tr>
             ))}

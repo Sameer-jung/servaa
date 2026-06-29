@@ -5,6 +5,7 @@ import { SuspendToggleButton } from '@/components/admin/SuspendToggleButton'
 import { PlanEditForm } from '@/components/admin/PlanEditForm'
 import { PlanBadge } from '@/components/admin/PlanBadge'
 import { AuditLogList } from '@/components/admin/AuditLogList'
+import { ClientDate } from '@/components/admin/ClientDate'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -28,8 +29,6 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
     .select('id', { count: 'exact', head: true })
     .eq('restaurant_id', id)
 
-  const ownerEmails = await getUserEmailMap([restaurant.owner_id])
-
   const { data: auditLogs } = await supabaseAdmin
     .from('admin_audit_logs')
     .select('*')
@@ -38,7 +37,11 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
     .order('created_at', { ascending: false })
     .limit(10)
 
-  const adminEmails = await getUserEmailMap((auditLogs || []).map((log) => log.admin_user_id).filter(Boolean))
+  // One combined lookup instead of two separate listUsers() round trips.
+  const emails = await getUserEmailMap([
+    restaurant.owner_id,
+    ...(auditLogs || []).map((log) => log.admin_user_id).filter(Boolean),
+  ])
 
   return (
     <div className="space-y-6">
@@ -54,7 +57,7 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
             <div className="flex justify-between">
               <dt className="text-gray-500 dark:text-gray-400">Owner</dt>
               <dd className="font-medium text-gray-900 dark:text-gray-100">
-                {ownerEmails.get(restaurant.owner_id) || '—'}
+                {emails.get(restaurant.owner_id) || '—'}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -84,7 +87,7 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
             <div className="flex justify-between">
               <dt className="text-gray-500 dark:text-gray-400">Created</dt>
               <dd className="font-medium text-gray-900 dark:text-gray-100">
-                {new Date(restaurant.created_at).toLocaleDateString()}
+                <ClientDate value={restaurant.created_at} />
               </dd>
             </div>
           </dl>
@@ -102,7 +105,7 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Plain metadata only — editing this has no billing effect and does not enforce anything.
             {restaurant.plan === 'trial' && restaurant.trial_ends_at && (
-              <> Trial ends on {new Date(restaurant.trial_ends_at).toLocaleDateString()}.</>
+              <> Trial ends on <ClientDate value={restaurant.trial_ends_at} />.</>
             )}
           </p>
           <PlanEditForm
@@ -115,7 +118,7 @@ export default async function AdminRestaurantDetailPage({ params }: PageProps) {
 
       <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100">Recent admin activity</h2>
-        <AuditLogList logs={auditLogs || []} adminEmails={adminEmails} />
+        <AuditLogList logs={auditLogs || []} adminEmails={emails} />
       </div>
     </div>
   )
