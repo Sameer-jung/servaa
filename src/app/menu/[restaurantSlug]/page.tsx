@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { notFound, unstable_rethrow } from 'next/navigation'
 import { hashTableAccessToken } from '@/utils/tableSession'
 import { getCachedMenu } from '@/lib/menuCache'
@@ -35,12 +36,17 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
   try {
     const supabase = await createClient()
 
-    // Get restaurant
-    const { data: restaurant, error: restaurantError } = await supabase
+    // Get restaurant via the service-role client: the public RLS policy
+    // (restaurants_select_public_active) only exposes is_active=true rows to
+    // anon sessions, so a normal client query can never distinguish "this
+    // restaurant doesn't exist" from "this restaurant is suspended" — both
+    // come back empty. We need that distinction to show a "temporarily
+    // unavailable" message (and keep the menu/cart from mounting) instead of
+    // an indistinguishable 404.
+    const { data: restaurant, error: restaurantError } = await supabaseAdmin
       .from('restaurants')
       .select('*')
       .eq('slug', restaurantSlug)
-      .eq('is_active', true)
       .single()
 
     if (restaurantError) {
@@ -49,6 +55,19 @@ export default async function MenuPage({ params, searchParams }: MenuPageProps) 
 
     if (!restaurant) {
       notFound()
+    }
+
+    if (!restaurant.is_active) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-bold text-gray-900">{restaurant.name}</h1>
+            <p className="mt-4 text-gray-600">
+              This menu is temporarily unavailable. Please check back later.
+            </p>
+          </div>
+        </div>
+      )
     }
 
     // Get table. Requires a valid tableToken matching the table's stored QR

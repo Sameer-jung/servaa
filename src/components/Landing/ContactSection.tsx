@@ -1,12 +1,41 @@
     "use client";
 
+    import { useState } from "react";
+    import toast from "react-hot-toast";
     import { Button } from "@/components/ui/Button";
 
     export function ContactSection() {
-    const handleContactSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleContactSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        alert("Thank you! We will contact you soon.");
-        event.currentTarget.reset();
+        const form = event.currentTarget;
+        setSubmitting(true);
+
+        try {
+            const formData = new FormData(form);
+            const response = await fetch("/api/contact", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: formData.get("name"),
+                    email: formData.get("email"),
+                    phone: formData.get("phone"),
+                    message: formData.get("message"),
+                }),
+            });
+
+            if (!response.ok) {
+                const result = await response.json().catch(() => null);
+                toast.error(result?.error || "Unable to send message. Please try again.");
+                return;
+            }
+
+            toast.success("Thank you! We will contact you soon.");
+            form.reset();
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -57,7 +86,7 @@
                 />
             </div>
 
-            <Button type="submit" className="mt-5 w-full sm:w-auto">
+            <Button type="submit" isLoading={submitting} className="mt-5 w-full sm:w-auto">
                 Submit Message
             </Button>
             </form>

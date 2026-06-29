@@ -54,6 +54,24 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { order: null, error: 'Missing table access token', status: 401 }
   }
 
+  // Suspension must actually stop orders, not just hide the menu — this is
+  // the canonical path for both customer and staff order creation, so the
+  // check lives here rather than duplicated per caller.
+  const { data: restaurant, error: restaurantError } = await supabaseAdmin
+    .from('restaurants')
+    .select('id, is_active')
+    .eq('id', restaurantId)
+    .maybeSingle()
+
+  if (restaurantError) {
+    console.error('[createOrder] restaurant lookup error:', restaurantError.message)
+    return { order: null, error: 'Could not validate restaurant.', status: 500 }
+  }
+
+  if (!restaurant || !restaurant.is_active) {
+    return { order: null, error: 'This restaurant is not currently accepting orders.', status: 403 }
+  }
+
   const tableQuery = supabaseAdmin
     .from('tables')
     .select('id, restaurant_id, is_active')

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { LoginForm } from '@/components/auth/LoginForm'
 import { createClient } from '@/lib/supabase/server'
+import { isPlatformAdmin } from '@/utils/admin'
 
 export const metadata = {
   title: 'Sign In',
@@ -13,7 +14,10 @@ export default async function LoginPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    redirect('/dashboard')
+    // Platform admins have no restaurant of their own, so /dashboard would
+    // be empty for them — send them straight to the admin area instead.
+    const admin = await isPlatformAdmin(user.id)
+    redirect(admin ? '/admin' : '/dashboard')
   }
 
   return (

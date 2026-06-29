@@ -1,6 +1,7 @@
 import { DashboardSidebar } from '@/components/dashboard/Sidebar'
 import { MobileNav } from '@/components/dashboard/MobileNav'
 import { OrderNotifications } from '@/components/dashboard/OrderNotifications'
+import { SuspendedBanner } from '@/components/dashboard/SuspendedBanner'
 
 export default function DashboardLayout({
   children,
@@ -11,6 +12,7 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <DashboardSidebar />
       <main className="pt-16 lg:ml-64 lg:pt-0">
+        <SuspendedBanner />
         <div className="mx-auto max-w-6xl p-4 lg:p-6">
           {children}
         </div>

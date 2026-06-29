@@ -44,6 +44,17 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Protect admin area - must be logged in. The actual platform-admin check
+  // (a DB lookup) happens in the per-page/per-route gate (src/utils/admin.ts),
+  // not here — middleware only confirms there's a session at all.
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+  }
+
   // Allow access to login/register regardless of auth state
   // NO redirects for /login or /register
 
