@@ -12,7 +12,6 @@ import { ModifierModal } from '@/components/menu/ModifierModal'
 import { OrderSidebar } from '@/components/menu/OrderSidebar'
 import { Restaurant, Table, MenuCategory, MenuItem, Order, Modifier } from '@/types'
 import { cn } from '@/utils/cn'
-import { formatCurrency } from "@/utils/format";
 
 interface MenuClientProps {
   restaurant: Restaurant
@@ -301,27 +300,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             onAdd={handleAddItemWithModifiers}
             currency={restaurant.currency}
           />
-          {hasCartItems && (
-            <button
-              type="button"
-              onClick={() => {
-                const cartElement = document.getElementById("customer-cart");
-                cartElement?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "end",
-                });
-              }}
-              className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-full bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-2xl shadow-brand-600/30 active:bg-brand-700 lg:hidden"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-brand-700">
-                {cart.totalItems}
-              </span>
-              View Cart
-              <span>
-                {formatCurrency(cart.totalPrice, restaurant.currency || "NPR")}
-              </span>
-            </button>
-          )}
+
 
           <div id="customer-cart">
             <StickyCart
