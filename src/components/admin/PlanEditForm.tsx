@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +14,7 @@ interface PlanEditFormProps {
 
 export function PlanEditForm({ restaurantId, plan, trialEndsAt }: PlanEditFormProps) {
   const [saving, setSaving] = useState(false)
+  const [isRefreshing, startRefresh] = useTransition()
   const router = useRouter()
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -41,7 +42,11 @@ export function PlanEditForm({ restaurantId, plan, trialEndsAt }: PlanEditFormPr
       }
 
       toast.success('Plan updated.')
-      router.refresh()
+      // Keep the button's loading state visible through the refetch, not
+      // just the PATCH call — otherwise the badge looks stale for a beat.
+      startRefresh(() => {
+        router.refresh()
+      })
     } finally {
       setSaving(false)
     }
@@ -70,7 +75,7 @@ export function PlanEditForm({ restaurantId, plan, trialEndsAt }: PlanEditFormPr
         defaultValue={trialEndsAt ? trialEndsAt.slice(0, 10) : ''}
       />
 
-      <Button type="submit" isLoading={saving}>
+      <Button type="submit" isLoading={saving || isRefreshing}>
         Save plan
       </Button>
     </form>
