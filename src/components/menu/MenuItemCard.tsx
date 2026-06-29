@@ -4,6 +4,7 @@
 
 import { MenuItem } from '@/types'
 import { formatCurrency } from '@/utils/format'
+import { getVariantBadge } from '@/utils/modifiers'
 
 interface MenuItemCardProps {
   item: MenuItem
@@ -17,6 +18,7 @@ interface MenuItemCardProps {
 export function MenuItemCard({ item, quantity, currency, onAdd, onRemove, variant = 'list' }: MenuItemCardProps) {
   const isAvailable = item.available
   const hasModifiers = Boolean(item.modifier_groups?.length)
+  const variantBadge = getVariantBadge(item.modifier_groups)
 
 if (variant === "grid") {
   return (
@@ -59,10 +61,16 @@ if (variant === "grid") {
             </span>
           </div>
         )}
+
+        {variantBadge && isAvailable && (
+          <span className="absolute left-1.5 top-1.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+            {variantBadge.count} {variantBadge.label}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col p-2.5">
-        <h3 className="line-clamp-1 text-xs font-bold leading-snug text-gray-950 sm:text-sm">
+        <h3 className="line-clamp-2 text-xs font-bold leading-snug text-gray-950 sm:text-sm">
           {item.name}
         </h3>
 
@@ -77,12 +85,6 @@ if (variant === "grid") {
             <p className="text-xs font-bold text-brand-700 sm:text-sm">
               {formatCurrency(item.price, currency)}
             </p>
-
-            {hasModifiers && isAvailable && (
-              <p className="mt-0.5 text-[10px] font-medium text-gray-400">
-                Customizable
-              </p>
-            )}
           </div>
 
           {!isAvailable ? (

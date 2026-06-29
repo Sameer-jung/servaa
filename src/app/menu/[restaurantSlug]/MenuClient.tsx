@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import toast from 'react-hot-toast'
+import { ChevronDown } from 'lucide-react'
 import posthog from 'posthog-js'
 import { useCartStore } from '@/hooks/useCartStore'
 import { MenuCategoryTabs } from '@/components/menu/CategoryTabs'
@@ -22,12 +24,17 @@ interface MenuClientProps {
   tableToken?: string
 }
 
+const SECTION_ITEM_CAP = 6
+
 export function MenuClient({ restaurant, table, categories, items, activeOrder, tableToken }: MenuClientProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(activeOrder)
   const [customerSessionId, setCustomerSessionId] = useState<string | null>(null)
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [visibleSectionId, setVisibleSectionId] = useState<string | null>(null)
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const cart = useCartStore()
   const hasCartItems = cart.totalItems > 0
 
@@ -81,6 +88,35 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     fetchSessionOrder()
   }, [table, customerSessionId])
 
+  // Scroll-spy: while browsing the "All" tab's grouped sections, highlight
+  // whichever category tab matches the section currently scrolled into the
+  // band just below the sticky header — tapping a tab still filters as
+  // before, this only changes which tab looks active while scrolling.
+  useEffect(() => {
+    if (activeCategory !== null || searchQuery) {
+      setVisibleSectionId(null)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+
+        const topId = visible[0]?.target.getAttribute('data-section-id')
+        if (topId) setVisibleSectionId(topId)
+      },
+      { rootMargin: '-140px 0px -70% 0px', threshold: 0 },
+    )
+
+    Object.values(sectionRefs.current).forEach((el) => {
+      if (el) observer.observe(el)
+    })
+
+    return () => observer.disconnect()
+  }, [activeCategory, searchQuery])
+
   const getItemQuantity = (itemId: string) => {
     return cart.items
       .filter((i) => i.menuItem.id === itemId)
@@ -93,6 +129,9 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       return
     }
     cart.addItem(item)
+    // Re-using a fixed toast id collapses rapid repeat taps into one
+    // refreshed toast instead of stacking duplicates.
+    toast.success(`${item.name} added to cart`, { id: 'add-to-cart' })
   }
 
   const handleRemoveItem = (item: MenuItem) => {
@@ -100,8 +139,8 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     if (cartItem) cart.updateQuantity(cartItem.cartItemId, cartItem.quantity - 1)
   }
 
-  const handleAddItemWithModifiers = (item: MenuItem, modifiers: Modifier[]) => {
-    cart.addItem(item, 1, '', modifiers)
+  const handleAddItemWithModifiers = (item: MenuItem, modifiers: Modifier[], quantity: number, notes: string) => {
+    cart.addItem(item, quantity, notes, modifiers)
   }
 
 
@@ -114,6 +153,27 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     return matchesSearch && matchesCategory
   })
 
+  // On the "All" tab (no category filter, no search) items are grouped under
+  // their category as labelled sections instead of one unsorted grid.
+  const groupedSections =
+    activeCategory === null && !searchQuery
+      ? categories
+          .map((category) => ({
+            id: category.id,
+            name: category.name,
+            items: filteredItems.filter((item) => item.category_id === category.id),
+          }))
+          .concat([
+            {
+              id: 'uncategorized',
+              name: 'Other',
+              items: filteredItems.filter(
+                (item) => !categories.some((category) => category.id === item.category_id),
+              ),
+            },
+          ])
+          .filter((section) => section.items.length > 0)
+      : null
 
   const itemCardProps = (item: MenuItem) => ({
     item,
@@ -127,15 +187,15 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     <div
       className={cn(
         "min-h-screen bg-gray-50",
-        hasCartItems ? "pb-80 lg:pb-0" : "pb-32 lg:pb-0",
+        hasCartItems ? "pb-80 lg:pb-0" : "pb-24 lg:pb-0",
       )}
     >
       {/* Sticky Header + Search + Categories */}
       <div className="sticky top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
         <header>
-          <div className="flex items-center justify-between px-4 py-3">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-gray-900">
                 {restaurant.name}
               </h1>
 
@@ -178,7 +238,7 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
 
         <MenuCategoryTabs
           categories={categories}
-          activeCategory={activeCategory}
+          activeCategory={activeCategory === null ? visibleSectionId : activeCategory}
           onSelect={(cat) => {
             setActiveCategory(cat);
             setSearchQuery("");
@@ -207,7 +267,62 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
         <div className="min-w-0 flex-1">
           {/* Menu items */}
           <div className="px-4 py-4">
-            {filteredItems.length > 0 ? (
+            {groupedSections ? (
+              groupedSections.length > 0 ? (
+                <div className="space-y-6">
+                  {groupedSections.map((section) => {
+                    const isExpanded = expandedSections.has(section.id)
+                    const showSeeMore = !isExpanded && section.items.length > SECTION_ITEM_CAP
+                    const visibleItems = showSeeMore
+                      ? section.items.slice(0, SECTION_ITEM_CAP)
+                      : section.items
+
+                    return (
+                      <div
+                        key={section.id}
+                        data-section-id={section.id}
+                        ref={(el) => {
+                          sectionRefs.current[section.id] = el
+                        }}
+                      >
+                        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+                          {section.name}
+                        </h2>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                          {visibleItems.map((item) => (
+                            <MenuItemCard
+                              key={item.id}
+                              {...itemCardProps(item)}
+                              variant="grid"
+                            />
+                          ))}
+                        </div>
+                        {showSeeMore && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedSections((prev) => {
+                                const next = new Set(prev)
+                                next.add(section.id)
+                                return next
+                              })
+                            }
+                            className="mt-3 flex items-center gap-1 text-sm font-semibold text-brand-600"
+                          >
+                            See more ({section.items.length - SECTION_ITEM_CAP} more)
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-gray-500">No items found</p>
+                </div>
+              )
+            ) : filteredItems.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredItems.map((item) => (
                   <MenuItemCard
