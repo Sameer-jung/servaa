@@ -104,8 +104,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     cart.addItem(item, 1, '', modifiers)
   }
 
-  // Derived state for what to show
-  const hasFilter = Boolean(searchQuery || activeCategory)
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
@@ -116,12 +114,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
     return matchesSearch && matchesCategory
   })
 
-  const categoryGroups = categories
-    .map((cat) => ({
-      category: cat,
-      items: items.filter((item) => item.category_id === cat.id),
-    }))
-    .filter((g) => g.items.length > 0)
 
   const itemCardProps = (item: MenuItem) => ({
     item,
@@ -213,63 +205,24 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
       <div className="lg:flex lg:items-start lg:gap-0">
         {/* Left: menu column */}
         <div className="min-w-0 flex-1">
-          {/* Menu items: category sections or filtered grid */}
-          {!hasFilter ? (
-            <div className="px-4 py-4">
-              <div className="space-y-5">
-                {categoryGroups.map(({ category, items: catItems }) => (
-                  <section key={category.id}>
-                    <div className="mb-3 flex items-center justify-between">
-                      <h2 className="text-base font-bold text-gray-900">
-                        {category.name}
-                      </h2>
-                      {catItems.length > 4 && (
-                        <button
-                          onClick={() => setActiveCategory(category.id)}
-                          className="text-sm font-medium text-brand-600 hover:underline"
-                        >
-                          View all
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                      {catItems.slice(0, 4).map((item) => (
-                        <MenuItemCard
-                          key={item.id}
-                          {...itemCardProps(item)}
-                          variant="grid"
-                        />
-                      ))}
-                    </div>
-                  </section>
+          {/* Menu items */}
+          <div className="px-4 py-4">
+            {filteredItems.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {filteredItems.map((item) => (
+                  <MenuItemCard
+                    key={item.id}
+                    {...itemCardProps(item)}
+                    variant="grid"
+                  />
                 ))}
-
-                {categoryGroups.length === 0 && (
-                  <div className="py-12 text-center">
-                    <p className="text-gray-500">No items available</p>
-                  </div>
-                )}
               </div>
-            </div>
-          ) : (
-            <div className="px-4 py-4">
-              {filteredItems.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {filteredItems.map((item) => (
-                    <MenuItemCard
-                      key={item.id}
-                      {...itemCardProps(item)}
-                      variant="grid"
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center">
-                  <p className="text-gray-500">No items found</p>
-                </div>
-              )}
-            </div>
-          )}
+            ) : (
+              <div className="py-12 text-center">
+                <p className="text-gray-500">No items found</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: order sidebar (desktop only) */}
@@ -300,7 +253,6 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
             onAdd={handleAddItemWithModifiers}
             currency={restaurant.currency}
           />
-
 
           <div id="customer-cart">
             <StickyCart
