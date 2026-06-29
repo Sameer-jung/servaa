@@ -3,6 +3,7 @@ import { DashboardOverview } from '@/components/dashboard/DashboardOverview'
 import { redirect } from 'next/navigation'
 import { writeAuditLog } from '@/utils/audit'
 import { generateSlug } from '@/utils/format'
+import { isPlatformAdmin } from '@/utils/admin'
 
 
 export const metadata = {
@@ -35,8 +36,14 @@ export default async function DashboardPage() {
     restaurantId = restaurant?.id
   }
 
-  // If no restaurant found, show inline creation form
+  // If no restaurant found, show inline creation form — unless this is a
+  // platform admin, who has no restaurant of their own and would otherwise
+  // be prompted to create one every time they land here after signing in.
   if (!restaurantId) {
+    if (await isPlatformAdmin(user.id)) {
+      redirect('/admin')
+    }
+
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
         <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm max-w-md w-full dark:border-gray-800 dark:bg-gray-900">
@@ -68,6 +75,10 @@ export default async function DashboardPage() {
               const tax_rate = parseFloat(formData.get('tax_rate') as string) || 0
               const currency = formData.get('currency') as string || 'NPR'
 
+              // plan/is_active/trial_ends_at are intentionally left out here —
+              // protect_restaurant_admin_fields forces them to safe defaults
+              // (trial / active / now+14d) on every owner-initiated insert,
+              // so there's nothing for this client-facing form to set.
               const { data: restaurant } = await supabase
                 .from('restaurants')
                 .insert({ name, slug, owner_id: user.id, address, phone, tax_rate, currency })
