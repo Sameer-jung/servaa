@@ -18,9 +18,11 @@ interface StickyCartProps {
   currency?: string;
   customerSessionId?: string | null;
   onOrderPlaced?: (order: Order) => void;
+  sessionExpired?: boolean;
+  onSessionExpired?: () => void;
 }
 
-export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrderPlaced, customerSessionId }: StickyCartProps) {
+export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrderPlaced, customerSessionId, sessionExpired, onSessionExpired }: StickyCartProps) {
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState(false)
   const [error, setError] = useState('')
@@ -29,6 +31,11 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) return
+
+    if (sessionExpired) {
+      onSessionExpired?.()
+      return
+    }
 
     setError('')
 
@@ -80,7 +87,13 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
         toast.success(MESSAGES.customerOrder.sentToKitchen);
         return
       }
-      
+
+      if (result?.error === 'TABLE_SESSION_EXPIRED') {
+        onSessionExpired?.()
+        toast.error('Please scan the QR code again to place this order.')
+        return
+      }
+
       toast.error(
         result?.error === "One or more items are unavailable"
           ? MESSAGES.customerOrder.itemsUnavailable
@@ -261,9 +274,10 @@ export function StickyCart({ restaurantId, tableId, tableToken, currency, onOrde
               <Button
                 className="w-full"
                 isLoading={placing}
+                disabled={sessionExpired}
                 onClick={handlePlaceOrder}
               >
-                Order Now
+                {sessionExpired ? 'Scan QR code to order' : 'Order Now'}
               </Button>
             </div>
           </div>

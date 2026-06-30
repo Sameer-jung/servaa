@@ -17,6 +17,8 @@ interface CustomerActionsProps {
   customerSessionId?: string | null
   tableToken?: string
   currency?: string
+  sessionExpired?: boolean
+  onSessionExpired?: () => void
 }
 
 type OrderItemData = {
@@ -34,7 +36,7 @@ type ActiveBillData = {
   total: number
 }
 
-export function CustomerActions({ restaurantId, tableId, customerSessionId, tableToken, currency = 'USD' }: CustomerActionsProps) {
+export function CustomerActions({ restaurantId, tableId, customerSessionId, tableToken, currency = 'USD', sessionExpired, onSessionExpired }: CustomerActionsProps) {
   const [requesting, setRequesting] = useState<'water' | 'bill' | 'waiter' | null>(null)
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [showOrderFirst, setShowOrderFirst] = useState(false)
@@ -97,6 +99,14 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
 
   const handleActionClick = async (type: 'water' | 'bill' | 'waiter') => {
     setIsExpanded(false)
+
+    // Viewing the live bill is read-only and always allowed; only the
+    // "Request Bill" action inside that modal is gated below.
+    if (type !== 'bill' && sessionExpired) {
+      onSessionExpired?.()
+      return
+    }
+
     setRequesting(type)
 
     if (type === 'bill') {
@@ -124,6 +134,11 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
   }
 
   const performServiceRequest = async (type: 'water' | 'bill' | 'waiter') => {
+    if (sessionExpired) {
+      onSessionExpired?.()
+      return
+    }
+
     setRequesting(type)
 
     try {
@@ -133,7 +148,15 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
         body: JSON.stringify({ restaurantId, tableId, type, customerSessionId, tableToken }),
       })
 
-      if (!res.ok) throw new Error('request failed')
+      if (!res.ok) {
+        const result = await res.json().catch(() => null)
+        if (result?.error === 'TABLE_SESSION_EXPIRED') {
+          onSessionExpired?.()
+          toast.error('Please scan the QR code again to send this request.')
+          return
+        }
+        throw new Error('request failed')
+      }
 
       posthog.capture('service_request_created', {
         restaurant_id: restaurantId,
@@ -186,7 +209,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
           <button
             type="button"
             onClick={() => handleActionClick('water')}
-            disabled={requesting !== null}
+            disabled={requesting !== null || sessionExpired}
             className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-100 active:bg-gray-50 disabled:opacity-60"
           >
             <Droplet className="h-4 w-4 flex-shrink-0 text-brand-600" />
@@ -195,7 +218,7 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
           <button
             type="button"
             onClick={() => handleActionClick('waiter')}
-            disabled={requesting !== null}
+            disabled={requesting !== null || sessionExpired}
             className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-100 active:bg-gray-50 disabled:opacity-60"
           >
             <Bell className="h-4 w-4 flex-shrink-0 text-brand-600" />
@@ -290,8 +313,13 @@ export function CustomerActions({ restaurantId, tableId, customerSessionId, tabl
           )}
 
           <div className="pt-4 border-t border-gray-100 mt-4">
-             <Button className="w-full" isLoading={requesting === 'bill'} onClick={() => performServiceRequest('bill')}>
-               Request Bill
+             <Button
+               className="w-full"
+               isLoading={requesting === 'bill'}
+               disabled={sessionExpired}
+               onClick={() => performServiceRequest('bill')}
+             >
+               {sessionExpired ? 'Scan QR code to request' : 'Request Bill'}
              </Button>
           </div>
         </div>

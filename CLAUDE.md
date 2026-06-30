@@ -69,6 +69,17 @@ Do not re-add `USING (true)` policies on `orders` or `order_items`.
 
 Generated via `POST /api/qr/route.ts`. Both `qr_code` (text URL) and `qr_code_data_url` (PNG data URL) are stored directly on the `tables` row. Do not move QR storage to Supabase Storage.
 
+### Table session expiry (20-hour ordering window)
+
+`tables.qr_token_hash` (the secret behind the printed QR code) is intentionally long-lived — it identifies a physical sticker, not a per-visit credential, so it is never rotated automatically (see `database/013_table_session_expiry.sql` for the full rationale). To bound how long a stale browser tab or saved link can keep ordering, a separate `table_sessions` table (RLS enabled, zero policies — service-role only, same pattern as `platform_admins`) tracks a 20-hour window per `(table_id, customer_session_id)`:
+
+- `src/lib/tableSessions.ts` — `touchTableSession` (start/refresh the window) and `isTableSessionActive` (check it).
+- `POST /api/table-session` — called once by `MenuClient` on every fresh menu page load that carries a valid `tableToken` (i.e. a real or repeated QR scan/link open); re-validates the token against `qr_token_hash` and refreshes the 20-hour window. Re-presenting the token always resets the clock — this is bookkeeping on top of the token check, not a replacement for it.
+- `createOrder.ts` and `POST /api/service-requests` both reject with `{ error: 'TABLE_SESSION_EXPIRED' }` (HTTP 410) when no active window exists for that table+customer pair. This only applies to customer writes — staff order creation (`actorUserId` set) is exempt, same as the table-token requirement itself.
+- Read-only customer endpoints (`GET /api/orders/bill`, `GET /api/orders/session`, `GET /api/orders/[orderId]/status`) are deliberately **not** gated by this — a customer with a lapsed ordering window can still view an existing order or unpaid bill.
+- `MenuClient` proactively disables the order/service-request buttons and shows a modal once the window lapses (`StickyCart`, `OrderSidebar`, `CustomerActions` all accept `sessionExpired`/`onSessionExpired` props); viewing the live bill (`CustomerActions`'s "Bill" button, before the in-modal "Request Bill" action) stays enabled throughout.
+- This does not protect against someone holding an actual photo/copy of the QR code itself — only against an already-open tab or saved link going stale. Fully closing that gap requires periodic rotation of `qr_token_hash` (reprinting), which is an explicitly deferred follow-up, not implemented here.
+
 ### Order lifecycle
 
 `pending → accepted → preparing → ready → completed` (or `→ cancelled`). Completing an order triggers invoice creation. Service requests live in the `service_requests` table; legacy zero-total orders also exist for compatibility — `src/utils/orders.ts` filters them from billable logic.
@@ -155,6 +166,7 @@ Run in order:
 15. `database/010_menu_image_storage.sql` (creates the public `menu-images` Supabase Storage bucket + staff-write/public-read RLS policies on `storage.objects` for menu item photo uploads)
 16. `database/011_super_admin.sql` (adds `platform_admins`, `support_messages`, `admin_audit_logs` — all RLS-enabled with zero policies, service-role-only — plus `restaurants.plan`/`restaurants.trial_ends_at` and the `protect_restaurant_admin_fields` trigger guarding those two columns and `restaurants.is_active` from owner-side updates)
 17. `database/012_super_admin_trial_default.sql` (must run after 011 — extends `protect_restaurant_admin_fields` to also fire on INSERT, closing a gap where `restaurants_insert_owner` RLS let an owner's own insert set `plan`/`is_active` directly; also gives every new restaurant a 14-day trial by default instead of an unset one)
+18. `database/013_table_session_expiry.sql` (adds `table_sessions` — RLS-enabled, zero policies, service-role-only — used to bound how long a stale customer browser tab/link can keep placing orders without re-presenting the table's QR token; see "Table session expiry" above)
 
 **Skip these for a fresh setup** — they are early migrations already consolidated into `schema.sql` (or unused): `audit_logs_v1.sql`, `safe_refactor_v1.sql`, `currency_defaults_v1.sql`, `add_waiter_request.sql` (the `'waiter'` service request is handled via the legacy order, not the `service_request_type` enum).
 
@@ -219,6 +231,7 @@ Both are owned by the same personal email and `servaaqr@gmail.com` (Owner on bot
 - Do not let admin pages or `/api/admin/*` routes read cross-tenant data through anything other than the service-role client behind `getAdminUser()`/`isPlatformAdmin()` (`src/utils/admin.ts`) — never loosen restaurant/order RLS to make admin reads easier.
 - Do not call `writeAdminAuditLog` with `void` — it's the deliberate exception to fire-and-forget audit logging and must be awaited with its failure surfaced.
 - Do not treat suspension as cosmetic — any new order-creation path must check `restaurants.is_active` the same way `createOrder()` does, not just hide UI.
+- Do not gate customer read endpoints (`orders/bill`, `orders/session`, `orders/[orderId]/status`) behind the 20-hour `table_sessions` window — only customer writes (`createOrder`, `service-requests`) check it. A customer with a lapsed window must still be able to view an existing order or unpaid bill.
 
 ## Known debt
 

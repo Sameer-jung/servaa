@@ -20,6 +20,8 @@ interface OrderSidebarProps {
   taxRate?: number
   customerSessionId?: string | null
   onOrderPlaced?: (order: Order) => void
+  sessionExpired?: boolean
+  onSessionExpired?: () => void
 }
 
 export function OrderSidebar({
@@ -30,6 +32,8 @@ export function OrderSidebar({
   taxRate = 0,
   customerSessionId,
   onOrderPlaced,
+  sessionExpired,
+  onSessionExpired,
 }: OrderSidebarProps) {
   const [placing, setPlacing] = useState(false)
   const cart = useCartStore()
@@ -40,6 +44,11 @@ export function OrderSidebar({
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) return
+
+    if (sessionExpired) {
+      onSessionExpired?.()
+      return
+    }
 
     if (
       !isUuid(restaurantId) ||
@@ -88,6 +97,12 @@ export function OrderSidebar({
         onOrderPlaced?.(result.order as Order)
         cart.clearCart()
         toast.success(MESSAGES.customerOrder.sentToKitchen)
+        return
+      }
+
+      if (result?.error === 'TABLE_SESSION_EXPIRED') {
+        onSessionExpired?.()
+        toast.error('Please scan the QR code again to place this order.')
         return
       }
 
@@ -211,11 +226,13 @@ export function OrderSidebar({
             <div className="px-4 pb-4">
               <button
                 onClick={handlePlaceOrder}
-                disabled={placing}
+                disabled={placing || sessionExpired}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
               >
                 {placing ? (
                   'Placing order...'
+                ) : sessionExpired ? (
+                  'Scan QR code to order'
                 ) : (
                   <>
                     Place Order

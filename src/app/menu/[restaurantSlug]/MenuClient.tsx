@@ -12,6 +12,7 @@ import { CustomerActions } from '@/components/menu/CustomerActions'
 import { OrderTracker } from '@/components/menu/OrderTracker'
 import { ModifierModal } from '@/components/menu/ModifierModal'
 import { OrderSidebar } from '@/components/menu/OrderSidebar'
+import { Modal } from '@/components/ui/Modal'
 import { Restaurant, Table, MenuCategory, MenuItem, Order, Modifier } from '@/types'
 import { cn } from '@/utils/cn'
 
@@ -30,6 +31,9 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(activeOrder)
   const [customerSessionId, setCustomerSessionId] = useState<string | null>(null)
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false)
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -87,6 +91,67 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
 
     fetchSessionOrder()
   }, [table, customerSessionId])
+
+  // Starts/refreshes this browser's 20-hour ordering window for the table —
+  // runs once per fresh page load that carries a valid tableToken (i.e. a
+  // real or repeated QR scan/link open). See
+  // database/013_table_session_expiry.sql for the full rationale.
+  useEffect(() => {
+    if (!table || !tableToken || !customerSessionId) return
+
+    let cancelled = false
+
+    const touchSession = async () => {
+      try {
+        const response = await fetch('/api/table-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: table.id, tableToken, customerSessionId }),
+        })
+        const result = await response.json().catch(() => null)
+        if (!cancelled && response.ok && result?.expiresAt) {
+          setSessionExpiresAt(result.expiresAt)
+          setSessionExpired(false)
+          setShowSessionExpiredModal(false)
+        }
+      } catch (error) {
+        console.error('[MenuClient] table session touch error:', error)
+      }
+    }
+
+    touchSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [table, tableToken, customerSessionId])
+
+  // Proactively flips the ordering window to "expired" once the 20-hour
+  // clock runs out while the page is open — server-side checks in
+  // createOrder/service-requests are the actual enforcement, this just
+  // disables buttons and shows the popup before the customer hits "submit".
+  useEffect(() => {
+    if (!sessionExpiresAt) return
+
+    const msUntilExpiry = new Date(sessionExpiresAt).getTime() - Date.now()
+    if (msUntilExpiry <= 0) {
+      setSessionExpired(true)
+      setShowSessionExpiredModal(true)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setSessionExpired(true)
+      setShowSessionExpiredModal(true)
+    }, msUntilExpiry)
+
+    return () => clearTimeout(timer)
+  }, [sessionExpiresAt])
+
+  const handleSessionExpired = () => {
+    setSessionExpired(true)
+    setShowSessionExpiredModal(true)
+  }
 
   // Scroll-spy: while browsing the "All" tab's grouped sections, highlight
   // whichever category tab matches the section currently scrolled into the
@@ -352,6 +417,8 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
                 taxRate={restaurant.tax_rate}
                 customerSessionId={customerSessionId}
                 onOrderPlaced={setTrackedOrder}
+                sessionExpired={sessionExpired}
+                onSessionExpired={handleSessionExpired}
               />
             </div>
           </div>
@@ -377,6 +444,8 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               currency={restaurant.currency || "NPR"}
               customerSessionId={customerSessionId}
               onOrderPlaced={setTrackedOrder}
+              sessionExpired={sessionExpired}
+              onSessionExpired={handleSessionExpired}
             />
           </div>
           {!hasCartItems && (
@@ -386,6 +455,8 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
               customerSessionId={customerSessionId}
               tableToken={tableToken}
               currency={restaurant.currency}
+              sessionExpired={sessionExpired}
+              onSessionExpired={handleSessionExpired}
             />
           )}
         </>
@@ -399,6 +470,29 @@ export function MenuClient({ restaurant, table, categories, items, activeOrder, 
           </p>
         </div>
       )}
+
+      {/* Ordering window expired: viewing existing orders/bills still works,
+          this only blocks placing new orders or sending service requests. */}
+      <Modal
+        isOpen={showSessionExpiredModal}
+        onClose={() => setShowSessionExpiredModal(false)}
+        title="Please scan again to keep ordering"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            This QR code was scanned over 20 hours ago. Please scan the table&apos;s QR code again with your
+            camera to place a new order or request service. You can still view your existing orders and bill
+            in the meantime.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowSessionExpiredModal(false)}
+            className="w-full rounded-xl bg-gray-100 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+          >
+            Got it
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

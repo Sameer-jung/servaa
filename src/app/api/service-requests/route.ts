@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs'
 import '@/lib/sentry'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { getBearerToken, hashTableAccessToken } from '@/utils/tableSession'
+import { isTableSessionActive } from '@/lib/tableSessions'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
@@ -41,6 +42,14 @@ export async function POST(req: NextRequest) {
 
     if (!table) {
       return NextResponse.json({ error: 'Table not found' }, { status: 404 })
+    }
+
+    // Same 20-hour ordering window as order creation (see
+    // database/013_table_session_expiry.sql) — service requests are a
+    // customer write action too, gated the same way.
+    const sessionActive = await isTableSessionActive(supabaseAdmin, tableId, customerSessionId)
+    if (!sessionActive) {
+      return NextResponse.json({ error: 'TABLE_SESSION_EXPIRED' }, { status: 410 })
     }
 
     const specialInstructions =
