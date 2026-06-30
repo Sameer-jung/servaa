@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { hashTableAccessToken } from '@/utils/tableSession'
+import { isTableSessionActive } from '@/lib/tableSessions'
 import { validateOrderItems, validatePrice } from '@/utils/validation'
 import { writeAuditLog } from '@/utils/audit'
 import { calculateItemTotal } from '@/utils/pricing'
@@ -94,6 +95,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { order: null, error: 'Table not found', status: 404 }
   }
 
+  // Checked before the session-expiry gate below: client_request_id exists
+  // specifically so a dropped-response retry returns the order that was
+  // already created, rather than erroring — that guarantee must hold even if
+  // the customer's ordering window has since lapsed between the original
+  // attempt and the retry.
   if (clientRequestId) {
     const { data: existingOrder } = await supabaseAdmin
       .from('orders')
@@ -105,6 +111,18 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     if (existingOrder) {
       return { order: existingOrder, error: null, status: 200 }
+    }
+  }
+
+  // Customer orders additionally require an active 20-hour ordering window
+  // (see database/013_table_session_expiry.sql) on top of the table token
+  // check above — staff orders (actorUserId set) are exempt, same as the
+  // table-token requirement itself. Placed after the idempotency check above
+  // so it only gates genuinely new orders, never a retry of one already made.
+  if (!actorUserId) {
+    const sessionActive = await isTableSessionActive(supabaseAdmin, table.id, customerSessionId)
+    if (!sessionActive) {
+      return { order: null, error: 'TABLE_SESSION_EXPIRED', status: 410 }
     }
   }
 
